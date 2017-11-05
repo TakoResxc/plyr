@@ -17,11 +17,7 @@ const googleCast = {
             utils.insertAfter(this.elements.cast, this.elements.wrapper);
         }
         // Set the class hook
-        utils.toggleClass(
-            this.elements.container,
-            this.config.classNames.cast.enabled,
-            true,
-        );
+        utils.toggleClass(this.elements.container, this.config.classNames.cast.enabled, true);
 
         utils.loadScript('//www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1');
         // FIXME: There __has__ to be a better way to do this
@@ -29,7 +25,7 @@ const googleCast = {
             setTimeout(() => {
                 googleCast.defaults = {
                     options: {
-                        receiverApplicationId:  window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                        receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
                         autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
                     },
                 };
@@ -43,10 +39,19 @@ const googleCast = {
         window.cast.framework.CastContext.getInstance().setOptions(config.options);
 
         // Set up event handlers
-        window.cast.framework.CastContext.getInstance().addEventListener(window.cast.framework.CastContextEventType.CAST_STATE_CHANGED, googleCast.castStateListener);
-        window.cast.framework.CastContext.getInstance().addEventListener(window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED, googleCast.sessionStateListener);
+        window.cast.framework.CastContext
+            .getInstance()
+            .addEventListener(
+                window.cast.framework.CastContextEventType.CAST_STATE_CHANGED,
+                googleCast.castStateListener
+            );
+        window.cast.framework.CastContext
+            .getInstance()
+            .addEventListener(
+                window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+                googleCast.sessionStateListener
+            );
         googleCast.log('Initialized google cast');
-
     },
 
     getCurrentSession() {
@@ -57,7 +62,7 @@ const googleCast = {
         const cc = window.cast.framework.CastContext.getInstance();
         let plyr;
 
-        if(!cc) {
+        if (!cc) {
             return undefined;
         }
         plyr = cc.plyr;
@@ -83,7 +88,7 @@ const googleCast = {
     loadMedia(plyr) {
         googleCast.log('load media called');
         const session = googleCast.getCurrentSession();
-        if(!session) {
+        if (!session) {
             return;
         }
 
@@ -119,7 +124,7 @@ const googleCast = {
             () => {
                 googleCast.log('Successfully loaded media');
             },
-            (errorCode) => {
+            errorCode => {
                 googleCast.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
             }
         );
@@ -143,7 +148,7 @@ const googleCast = {
     unbindPlyr(plyr) {
         const cc = window.cast.framework.CastContext.getInstance();
         const currentPlyr = cc.plyr;
-        if(currentPlyr === plyr) {
+        if (currentPlyr === plyr) {
             utils.off(currentPlyr.media, 'play', googleCast.onPlay);
             utils.off(currentPlyr.media, 'pause', googleCast.onPause);
             utils.off(currentPlyr.media, 'ready', googleCast.onReady);
@@ -155,40 +160,40 @@ const googleCast = {
         const chrome = window.chrome;
         switch (error.code) {
             case chrome.cast.ErrorCode.API_NOT_INITIALIZED:
-                return `The API is not initialized.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `The API is not initialized.${error.description ? ` :${error.description}` : ''}`;
             case chrome.cast.ErrorCode.CANCEL:
-                return `The operation was canceled by the user${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `The operation was canceled by the user${error.description ? ` :${error.description}` : ''}`;
             case chrome.cast.ErrorCode.CHANNEL_ERROR:
-                return `A channel to the receiver is not available.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `A channel to the receiver is not available.${error.description
+                    ? ` :${error.description}`
+                    : ''}`;
             case chrome.cast.ErrorCode.EXTENSION_MISSING:
-                return `The Cast extension is not available.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `The Cast extension is not available.${error.description ? ` :${error.description}` : ''}`;
             case chrome.cast.ErrorCode.INVALID_PARAMETER:
-                return `The parameters to the operation were not valid.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `The parameters to the operation were not valid.${error.description
+                    ? ` :${error.description}`
+                    : ''}`;
             case chrome.cast.ErrorCode.RECEIVER_UNAVAILABLE:
-                return `No receiver was compatible with the session request.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `No receiver was compatible with the session request.${error.description
+                    ? ` :${error.description}`
+                    : ''}`;
             case chrome.cast.ErrorCode.SESSION_ERROR:
-                return `A session could not be created, or a session was invalid.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `A session could not be created, or a session was invalid.${error.description
+                    ? ` :${error.description}`
+                    : ''}`;
             case chrome.cast.ErrorCode.TIMEOUT:
-                return `The operation timed out.${
-                    error.description ? ` :${  error.description}` : ''}`;
+                return `The operation timed out.${error.description ? ` :${error.description}` : ''}`;
             default:
                 return `Unknown error: ${JSON.stringify(error)}`;
         }
     },
 
     castStateListener(data) {
-        googleCast.log(`Cast State Changed: ${  JSON.stringify(data)}`);
+        googleCast.log(`Cast State Changed: ${JSON.stringify(data)}`);
         const plyr = googleCast.getCurrentPlyr();
         const cs = window.cast.framework.CastState;
         let castEvent;
-        switch(data.castState) {
+        switch (data.castState) {
             case cs.NO_DEVICES_AVAILABLE:
             case cs.NOT_CONNECTED:
                 googleCast.log('NOT CONNECTED');
@@ -203,7 +208,7 @@ const googleCast = {
                 // googleCast.log(`Unknown cast state=${JSON.stringify(data.castState)}`);
                 break;
         }
-        if(plyr && castEvent) {
+        if (plyr && castEvent) {
             const castActive = castEvent === 'castenabled';
             // Add class hook
             utils.toggleClass(plyr.elements.container, plyr.config.classNames.cast.active, castActive);
@@ -213,13 +218,13 @@ const googleCast = {
 
     sessionStateListener(data) {
         const plyr = googleCast.getCurrentPlyr();
-        if(!plyr) {
+        if (!plyr) {
             return;
         }
         // console.log("Session State Changed: " + JSON.stringify(data));
         const ss = window.cast.framework.SessionState;
 
-        switch(data.sessionState) {
+        switch (data.sessionState) {
             case ss.NO_SESSION:
                 break;
             case ss.SESSION_STARTING:
@@ -241,15 +246,15 @@ const googleCast = {
     },
 
     requestSession(plyr) {
-    // Check if a session already exists, if it does, just use it
+        // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
         let wasPlyrAlreadyBound = true;
         const existingPlyr = googleCast.getCurrentPlyr();
-        if(existingPlyr !== undefined && existingPlyr !== plyr) {
+        if (existingPlyr !== undefined && existingPlyr !== plyr) {
             googleCast.unbindPlyr(existingPlyr);
         }
-        if(existingPlyr !== plyr) {
+        if (existingPlyr !== plyr) {
             googleCast.bindPlyr(plyr);
             wasPlyrAlreadyBound = false;
         }
@@ -264,14 +269,13 @@ const googleCast = {
             googleCast.unbindPlyr(googleCast.getCurrentPlyr());
         }
 
-
         // We need to show the cast drop down if:
         // 1) There was no session
         // 2) There was a session and the current plyr was already bound
         //
         // (2) is needed since we need a way to disable cast via the current
         // plyr instance
-        if(session === null || wasPlyrAlreadyBound) {
+        if (session === null || wasPlyrAlreadyBound) {
             const promise = window.cast.framework.CastContext.getInstance().requestSession();
             promise.then(onRequestSuccess, onError);
         } else {
