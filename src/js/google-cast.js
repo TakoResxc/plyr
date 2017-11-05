@@ -5,16 +5,8 @@ const googleCast = {
         googleCast.defaults = {};
         googleCast.config = {};
 
-        // Debugging
+        // TODO: Get cast logs under a separate namespace?
         googleCast.log = () => {};
-        googleCast.warn = () => {};
-        googleCast.error = () => {};
-        if (googleCast.config.debug && 'console' in window) {
-        googleCast.log = console.log; // eslint-disable-line
-        googleCast.warn = console.warn; // eslint-disable-line
-        googleCast.error = console.error; // eslint-disable-line
-            googleCast.log('Debugging enabled');
-        }
 
         // Inject the container
         if (!utils.is.htmlElement(this.elements.cast)) {
