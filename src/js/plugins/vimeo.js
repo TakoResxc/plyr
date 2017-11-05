@@ -126,8 +126,27 @@ const vimeo = {
             },
         });
 
-        // Rebuild UI
-        window.setTimeout(() => ui.build.call(player), 0);
+        // Muted
+        Object.defineProperty(player.media, 'muted', {
+            get() {
+                return volume === 0;
+            },
+            set(input) {
+                const toggle = utils.is.boolean(input) ? input : false;
+                player.volume = toggle ? 0 : player.config.volume;
+            },
+        });
+
+        // Source
+        let currentSrc;
+        player.embed.getVideoUrl().then(value => {
+            currentSrc = value;
+        });
+        Object.defineProperty(player.media, 'currentSrc', {
+            get() {
+                return currentSrc;
+            },
+        });
 
         // Get title
         player.embed.getVideoTitle().then(title => {
@@ -209,6 +228,9 @@ const vimeo = {
             this.media.paused = true;
             utils.dispatchEvent.call(this, this.media, 'ended');
         });
+
+        // Rebuild UI
+        window.setTimeout(() => ui.build.call(player), 0);
     },
 };
 

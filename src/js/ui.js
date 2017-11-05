@@ -7,7 +7,6 @@ import captions from './captions';
 import controls from './controls';
 import fullscreen from './fullscreen';
 import listeners from './listeners';
-import storage from './storage';
 import googleCast from './google-cast';
 
 const ui = {
@@ -75,7 +74,6 @@ const ui = {
 
         // Set volume
         this.volume = null;
-        ui.updateVolume.call(this);
 
         // Set playback speed
         this.speed = null;
@@ -172,24 +170,19 @@ const ui = {
     updateVolume() {
         // Update the <input type="range"> if present
         if (this.supported.ui) {
-            const value = this.media.muted ? 0 : this.media.volume;
+            const value = this.muted ? 0 : this.volume;
 
-            if (this.elements.inputs.volume) {
+            if (utils.is.htmlElement(this.elements.inputs.volume)) {
                 ui.setRange.call(this, this.elements.inputs.volume, value);
             }
         }
 
-        // Update the volume in storage
-        storage.set.call(this, {
-            volume: this.media.volume,
-        });
-
         // Toggle class if muted
-        utils.toggleClass(this.elements.container, this.config.classNames.muted, this.media.muted);
+        utils.toggleClass(this.elements.container, this.config.classNames.muted, this.muted);
 
         // Update checkbox for mute state
-        if (this.supported.ui && this.elements.buttons.mute) {
-            utils.toggleState(this.elements.buttons.mute, this.media.muted);
+        if (this.supported.ui && utils.is.htmlElement(this.elements.buttons.mute)) {
+            utils.toggleState(this.elements.buttons.mute, this.muted);
         }
     },
 

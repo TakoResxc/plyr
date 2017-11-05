@@ -299,11 +299,11 @@ const defaults = {
             supported: 'plyr--airplay-supported',
             active: 'plyr--airplay-active',
         },
+        tabFocus: 'plyr__tab-focus',
         cast: {
             enabled: 'plyr--cast-enabled',
             active: 'plyr--cast-active',
         },
-        tabFocus: 'tab-focus',
     },
 };
 

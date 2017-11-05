@@ -5,6 +5,7 @@
 import support from './support';
 import utils from './utils';
 import controls from './controls';
+import storage from './storage';
 
 const captions = {
     // Setup captions
@@ -15,16 +16,16 @@ const captions = {
         }
 
         // Set default language if not set
-        if (!utils.is.empty(this.storage.language)) {
-            this.captions.language = this.storage.language;
+        if (!utils.is.empty(storage.get.call(this).language)) {
+            this.captions.language = storage.get.call(this).language;
         } else if (utils.is.empty(this.captions.language)) {
             this.captions.language = this.config.captions.language.toLowerCase();
         }
 
         // Set captions enabled state if not set
         if (!utils.is.boolean(this.captions.enabled)) {
-            if (!utils.is.empty(this.storage.language)) {
-                this.captions.enabled = this.storage.captions;
+            if (!utils.is.empty(storage.get.call(this).language)) {
+                this.captions.enabled = storage.get.call(this).captions;
             } else {
                 this.captions.enabled = this.config.captions.active;
             }
@@ -126,7 +127,7 @@ const captions = {
 
                 // If we change the active track while a cue is already displayed we need to update it
                 if (this.captions.currentTrack.activeCues && this.captions.currentTrack.activeCues.length > 0) {
-                    controls.setCue.call(this, this.captions.currentTrack);
+                    captions.setCue.call(this, this.captions.currentTrack);
                 }
             }
         } else if (this.type === 'vimeo' && this.captions.active) {
@@ -188,16 +189,16 @@ const captions = {
     // Display captions container and button (for initialization)
     show() {
         // If there's no caption toggle, bail
-        if (!this.elements.buttons.captions) {
+        if (!utils.is.htmlElement(this.elements.buttons.captions)) {
             return;
         }
 
         // Try to load the value from storage
-        let active = this.storage.captions;
+        let active = storage.get.call(this).captions;
 
         // Otherwise fall back to the default config
         if (!utils.is.boolean(active)) {
-            ({ active } = this.captions);
+            ({ active } = this.config.captions);
         } else {
             this.captions.active = active;
         }

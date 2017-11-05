@@ -91,9 +91,7 @@ const listeners = {
             controls.updateSetting.call(this, 'speed');
 
             // Save speed to localStorage
-            storage.set.call(this, {
-                speed: this.speed,
-            });
+            storage.set.call(this, { speed: this.speed });
         });
 
         // Quality change
@@ -102,17 +100,19 @@ const listeners = {
             controls.updateSetting.call(this, 'quality');
 
             // Save speed to localStorage
-            storage.set.call(this, {
-                quality: this.quality,
-            });
+            storage.set.call(this, { quality: this.quality });
         });
 
         // Caption language change
         utils.on(this.media, 'captionchange', () => {
             // Save speed to localStorage
-            storage.set.call(this, {
-                language: this.captions.language,
-            });
+            storage.set.call(this, { language: this.language });
+        });
+
+        // Volume change
+        utils.on(this.media, 'volumechange', () => {
+            // Save speed to localStorage
+            storage.set.call(this, { volume: this.volume });
         });
 
         // Captions toggle
@@ -121,9 +121,7 @@ const listeners = {
             controls.updateSetting.call(this, 'captions');
 
             // Save speed to localStorage
-            storage.set.call(this, {
-                captions: this.captions.enabled,
-            });
+            storage.set.call(this, { captions: this.captions.enabled });
         });
 
         // Proxy events to container
@@ -139,6 +137,21 @@ const listeners = {
         const inputEvent = this.browser.isIE ? 'change' : 'input';
         let last = null;
 
+        // Trigger custom and default handlers
+        const proxy = (event, handlerKey, defaultHandler) => {
+            const customHandler = this.config.listeners[handlerKey];
+
+            // Execute custom handler
+            if (utils.is.function(customHandler)) {
+                customHandler.call(this, event);
+            }
+
+            // Only call default handler if not prevented in custom handler
+            if (!event.defaultPrevented && utils.is.function(defaultHandler)) {
+                defaultHandler.call(this, event);
+            }
+        };
+
         // Click play/pause helper
         const togglePlay = () => {
             const play = this.togglePlay();
@@ -153,11 +166,10 @@ const listeners = {
         };
 
         // Get the key code for an event
-        function getKeyCode(event) {
-            return event.keyCode ? event.keyCode : event.which;
-        }
+        const getKeyCode = event => (event.keyCode ? event.keyCode : event.which);
 
-        function handleKey(event) {
+        // Handle key press
+        const handleKey = event => {
             const code = getKeyCode(event);
             const pressed = event.type === 'keydown';
             const held = pressed && code === last;
@@ -169,10 +181,10 @@ const listeners = {
             }
 
             // Seek by the number keys
-            function seekByKey() {
+            const seekByKey = () => {
                 // Divide the max duration into 10th's and times by the number value
                 this.currentTime = this.duration / 10 * (code - 48);
-            }
+            };
 
             // Handle the key on keydown
             // Reset on keyup
@@ -201,14 +213,13 @@ const listeners = {
                     76,
                     79,
                 ];
-                const checkFocus = [38, 40];
 
-                if (checkFocus.includes(code)) {
-                    const focused = utils.getFocusElement();
-
-                    if (utils.is.htmlElement(focused) && utils.getFocusElement().type === 'radio') {
-                        return;
-                    }
+                // Check focused element
+                // and if the focused element is not editable (e.g. text input)
+                // and any that accept key input http://webaim.org/techniques/keyboard/
+                const focused = utils.getFocusElement();
+                if (utils.is.htmlElement(focused) && utils.matches(focused, this.config.selectors.editable)) {
+                    return;
                 }
 
                 // If the code is found prevent default (e.g. prevent scrolling for arrows)
@@ -238,7 +249,7 @@ const listeners = {
                     case 75:
                         // Space and K key
                         if (!held) {
-                            togglePlay();
+                            this.togglePlay();
                         }
                         break;
 
@@ -255,7 +266,7 @@ const listeners = {
                     case 77:
                         // M key
                         if (!held) {
-                            this.toggleMute();
+                            this.muted = 'toggle';
                         }
                         break;
 
@@ -308,36 +319,13 @@ const listeners = {
             } else {
                 last = null;
             }
-        }
+        };
 
         // Keyboard shortcuts
         if (this.config.keyboard.focused) {
-            // Handle global presses
-            if (this.config.keyboard.global) {
-                utils.on(
-                    window,
-                    'keydown keyup',
-                    event => {
-                        const code = getKeyCode(event);
-                        const focused = utils.getFocusElement();
-                        const allowed = [48, 49, 50, 51, 52, 53, 54, 56, 57, 75, 77, 70, 67, 73, 76, 79];
-
-                        // Only handle global key press if key is in the allowed keys
-                        // and if the focused element is not editable (e.g. text input)
-                        // and any that accept key input http://webaim.org/techniques/keyboard/
-                        if (
-                            allowed.includes(code) &&
-                            (!utils.is.htmlElement(focused) || !utils.matches(focused, this.config.selectors.editable))
-                        ) {
-                            handleKey(event);
-                        }
-                    },
-                    false
-                );
-            }
-
-            // Handle presses on focused
             utils.on(this.elements.container, 'keydown keyup', handleKey, false);
+        } else if (this.config.keyboard.global) {
+            utils.on(window, 'keydown keyup', handleKey, false);
         }
 
         // Detect tab focus
@@ -358,21 +346,6 @@ const listeners = {
                 utils.toggleClass(utils.getFocusElement(), this.config.classNames.tabFocus, true);
             }, 0);
         });
-
-        // Trigger custom and default handlers
-        const proxy = (event, handlerKey, defaultHandler) => {
-            const customHandler = this.config.listeners[handleKey];
-
-            // Execute custom handler
-            if (utils.is.function(customHandler)) {
-                customHandler.call(this, event);
-            }
-
-            // Only call default handler if not prevented in custom handler
-            if (!event.defaultPrevented && utils.is.function(defaultHandler)) {
-                defaultHandler.call(this, event);
-            }
-        };
 
         // Play
         utils.on(this.elements.buttons.play, 'click', event => proxy(event, 'play', togglePlay));
@@ -404,7 +377,7 @@ const listeners = {
         // Mute
         utils.on(this.elements.buttons.mute, 'click', event =>
             proxy(event, 'mute', () => {
-                this.toggleMute();
+                this.muted = 'toggle';
             })
         );
 
@@ -432,7 +405,7 @@ const listeners = {
         // Picture-in-Picture
         utils.on(this.elements.buttons.pip, 'click', event =>
             proxy(event, 'pip', () => {
-                this.togglePictureInPicture();
+                this.pip = 'toggle';
             })
         );
 
