@@ -8,6 +8,7 @@ import controls from './controls';
 import fullscreen from './fullscreen';
 import listeners from './listeners';
 import storage from './storage';
+import googleCast from './google-cast';
 
 const ui = {
     addStyleHook() {
@@ -69,6 +70,8 @@ const ui = {
 
         // Captions
         captions.setup.call(this);
+
+        googleCast.setup.call(this);
 
         // Set volume
         this.volume = null;

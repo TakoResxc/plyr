@@ -16,6 +16,8 @@ import fullscreen from './fullscreen';
 import media from './media';
 import storage from './storage';
 import source from './source';
+import googleCast from './google-cast';
+
 import ui from './ui';
 
 // Globals
@@ -776,6 +778,14 @@ class Plyr {
         this.media.webkitShowPlaybackTargetPicker();
 
         return this;
+    }
+
+    googleCast() {
+        if (!support.cast) {
+          return this;
+        }
+
+        googleCast.requestSession(this);
     }
 
     // Show the player controls in fullscreen mode

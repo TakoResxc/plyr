@@ -313,6 +313,7 @@ const utils = {
                 airplay: utils.getElement.call(this, this.config.selectors.buttons.airplay),
                 settings: utils.getElement.call(this, this.config.selectors.buttons.settings),
                 captions: utils.getElement.call(this, this.config.selectors.buttons.captions),
+                cast: utils.getElement.call(this, this.config.selectors.buttons.cast),
                 fullscreen: utils.getElement.call(this, this.config.selectors.buttons.fullscreen),
             };
 

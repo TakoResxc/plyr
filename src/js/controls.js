@@ -170,7 +170,11 @@ const controls = {
                 labelKey = 'play';
                 iconDefault = 'play';
                 break;
-
+            case 'cast':
+                labelKey = 'toggleCast';
+                iconDefault = 'cast-off';
+                iconToggled = 'cast-on';
+                break;
             default:
                 labelKey = type;
                 iconDefault = type;
@@ -984,6 +988,11 @@ const controls = {
         // Toggle captions button
         if (this.config.controls.includes('captions')) {
             container.appendChild(controls.createButton.call(this, 'captions'));
+        }
+
+        // Google cast button
+        if (this.config.controls.includes('cast')) {
+            container.appendChild(controls.createButton.call(this, 'cast'));
         }
 
         // Settings button / menu

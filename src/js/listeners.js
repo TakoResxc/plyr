@@ -415,6 +415,13 @@ const listeners = {
             })
         );
 
+        // Google cast
+        utils.on(this.elements.buttons.cast, 'click', event =>
+            proxy(event, 'cast', () => {
+                this.googleCast();
+            })
+        );
+
         // Fullscreen
         utils.on(this.elements.buttons.fullscreen, 'click', event =>
             proxy(event, 'fullscreen', () => {
