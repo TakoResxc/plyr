@@ -7,7 +7,7 @@ import captions from './captions';
 import controls from './controls';
 import fullscreen from './fullscreen';
 import listeners from './listeners';
-import googleCast from './google-cast';
+import googleCast from './plugins/google-cast';
 
 const ui = {
     addStyleHook() {

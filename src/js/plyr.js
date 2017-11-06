@@ -16,7 +16,7 @@ import fullscreen from './fullscreen';
 import media from './media';
 import storage from './storage';
 import source from './source';
-import googleCast from './google-cast';
+import googleCast from './plugins/google-cast';
 
 import ui from './ui';
 
