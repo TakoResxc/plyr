@@ -2,7 +2,7 @@
 // Plyr source update
 // ==========================================================================
 
-import types from './types';
+import { providers } from './types';
 import utils from './utils';
 import media from './media';
 import ui from './ui';
@@ -26,7 +26,7 @@ const source = {
     // Sources are not checked for support so be careful
     change(input) {
         if (!utils.is.object(input) || !('sources' in input) || !input.sources.length) {
-            this.warn('Invalid source format');
+            this.debug.warn('Invalid source format');
             return;
         }
 
@@ -44,39 +44,29 @@ const source = {
                 this.media = null;
 
                 // Reset class name
-                if (utils.is.htmlElement(this.elements.container)) {
+                if (utils.is.element(this.elements.container)) {
                     this.elements.container.removeAttribute('class');
                 }
 
-                // Set the type
-                if ('type' in input) {
-                    this.type = input.type;
-
-                    // Get child type for video (it might be an embed)
-                    if (this.type === 'video') {
-                        const firstSource = input.sources[0];
-
-                        if ('type' in firstSource && types.embed.includes(firstSource.type)) {
-                            this.type = firstSource.type;
-                        }
-                    }
-                }
+                // Set the type and provider
+                this.type = input.type;
+                this.provider = !utils.is.empty(input.sources[0].provider) ? input.sources[0].provider : providers.html5;
 
                 // Check for support
-                this.supported = support.check(this.type, this.config.inline);
+                this.supported = support.check(this.type, this.provider, this.config.inline);
 
                 // Create new markup
-                switch (this.type) {
-                    case 'video':
+                switch (`${this.provider}:${this.type}`) {
+                    case 'html5:video':
                         this.media = utils.createElement('video');
                         break;
 
-                    case 'audio':
+                    case 'html5:audio':
                         this.media = utils.createElement('audio');
                         break;
 
-                    case 'youtube':
-                    case 'vimeo':
+                    case 'youtube:video':
+                    case 'vimeo:video':
                         this.media = utils.createElement('div');
                         this.embedId = input.sources[0].src;
                         break;
@@ -115,13 +105,7 @@ const source = {
                     }
                 }
 
-                // Restore class hooks
-                utils.toggleClass(
-                    this.elements.container,
-                    this.config.classNames.captions.active,
-                    this.supported.ui && this.captions.enabled
-                );
-
+                // Restore class hook
                 ui.addStyleHook.call(this);
 
                 // Set new sources for html5

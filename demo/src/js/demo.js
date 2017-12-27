@@ -34,15 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 0);
     });
 
-    /* document.body.addEventListener('ready', function(event) {
-        console.log(event);
-    }); */
-
     // Setup the player
     const player = new window.Plyr('#player', {
         debug: true,
         title: 'View From A Blue Moon',
         iconUrl: '../dist/plyr.svg',
+        keyboard: {
+            global: true,
+        },
         tooltips: {
             controls: true,
         },
@@ -62,6 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
             'pip',
             'airplay',
         ],
+        keys: {
+            google: 'AIzaSyDrNwtN3nLH_8rjCmu5Wq3ZCm4MNAVdc0c',
+        },
     });
 
     // Expose for testing
@@ -94,29 +96,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch (type) {
             case types.video:
-                player.src = {
+                player.source = {
                     type: 'video',
                     title: 'View From A Blue Moon',
-                    sources: [
-                        {
-                            src: 'https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-HD.mp4',
-                            type: 'video/mp4',
-                        },
-                    ],
-                    poster: 'https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-HD.jpg',
+                    sources: [{
+                        src: 'media/View_From_A_Blue_Moon_Trailer-HD.mp4',
+                        type: 'video/mp4',
+                    }],
+                    poster: 'media/View_From_A_Blue_Moon_Trailer-HD.jpg',
                     tracks: [
                         {
                             kind: 'captions',
                             label: 'English',
                             srclang: 'en',
-                            src: 'https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-HD.en.vtt',
+                            src: 'media/View_From_A_Blue_Moon_Trailer-HD.en.vtt',
                             default: true,
                         },
                         {
                             kind: 'captions',
                             label: 'French',
                             srclang: 'fr',
-                            src: 'https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-HD.fr.vtt',
+                            src: 'media/View_From_A_Blue_Moon_Trailer-HD.fr.vtt',
                         },
                     ],
                 };
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case types.audio:
-                player.src = {
+                player.source = {
                     type: 'audio',
                     title: 'Kishi Bashi &ndash; &ldquo;It All Began With A Burst&rdquo;',
                     sources: [
@@ -142,29 +142,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case types.youtube:
-                player.src = {
+                player.source = {
                     type: 'video',
                     title: 'View From A Blue Moon',
-                    sources: [
-                        {
-                            src: 'https://www.youtube.com/watch?v=bTqVqk7FSmY',
-                            type: 'youtube',
-                        },
-                    ],
+                    sources: [{
+                        src: 'https://youtube.com/watch?v=bTqVqk7FSmY',
+                        provider: 'youtube',
+                    }],
                 };
 
                 break;
 
             case types.vimeo:
-                player.src = {
+                player.source = {
                     type: 'video',
-                    title: 'View From A Blue Moon',
-                    sources: [
-                        {
-                            src: 'https://vimeo.com/76979871',
-                            type: 'vimeo',
-                        },
-                    ],
+                    sources: [{
+                        src: 'https://vimeo.com/76979871',
+                        provider: 'vimeo',
+                    }],
                 };
 
                 break;

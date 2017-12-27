@@ -4,12 +4,11 @@
 /* global require, __dirname */
 /* eslint no-console: "off" */
 
-const fs = require('fs');
+const del = require('del');
 const path = require('path');
 const gulp = require('gulp');
 const gutil = require('gulp-util');
 const concat = require('gulp-concat');
-const less = require('gulp-less');
 const sass = require('gulp-sass');
 const cleancss = require('gulp-clean-css');
 const run = require('run-sequence');
@@ -29,14 +28,17 @@ const { minify } = require('uglify-es');
 const commonjs = require('rollup-plugin-commonjs');
 const resolve = require('rollup-plugin-node-resolve');
 
-const root = __dirname;
+const bundles = require('./bundles.json');
+const pkg = require('./package.json');
+const aws = require('./aws.json');
 
+// Paths
+const root = __dirname;
 const paths = {
     plyr: {
         // Source paths
         src: {
-            less: path.join(root, 'src/less/**/*'),
-            scss: path.join(root, 'src/scss/**/*'),
+            sass: path.join(root, 'src/sass/**/*.scss'),
             js: path.join(root, 'src/js/**/*'),
             sprite: path.join(root, 'src/sprite/*.svg'),
         },
@@ -47,7 +49,7 @@ const paths = {
     demo: {
         // Source paths
         src: {
-            less: path.join(root, 'demo/src/less/**/*'),
+            sass: path.join(root, 'demo/src/sass/**/*.scss'),
             js: path.join(root, 'demo/src/js/**/*'),
         },
 
@@ -57,29 +59,21 @@ const paths = {
         // Demo
         root: path.join(root, 'demo/'),
     },
-    upload: [path.join(root, 'dist/**'), path.join(root, 'demo/dist/**')],
+    upload: [
+        path.join(root, 'dist/**'),
+        path.join(root, 'demo/dist/**'),
+    ],
 };
 
 // Task arrays
 const tasks = {
-    less: [],
-    scss: [],
+    sass: [],
     js: [],
     sprite: [],
+    clean: ['clean'],
 };
 
-// Load json
-function loadJSON(pathname) {
-    try {
-        return JSON.parse(fs.readFileSync(pathname));
-    } catch (err) {
-        return {};
-    }
-}
-
-// Fetch bundles from JSON
-const bundles = loadJSON(path.join(root, 'bundles.json'));
-const pkg = loadJSON(path.join(root, 'package.json'));
+// Size plugin
 const sizeOptions = { showFiles: true, gzip: true };
 
 // Browserlist
@@ -87,27 +81,38 @@ const browsers = ['> 1%'];
 
 // Babel config
 const babelrc = {
-    presets: [
-        [
-            'env',
-            {
-                targets: {
-                    browsers,
-                },
-                useBuiltIns: true,
-                modules: false,
+    presets: [[
+        'env',
+        {
+            targets: {
+                browsers,
             },
-        ],
-    ],
+            useBuiltIns: true,
+            modules: false,
+        },
+    ]],
     plugins: ['external-helpers'],
     babelrc: false,
     exclude: 'node_modules/**',
 };
 
+// Clean out /dist
+gulp.task('clean', () => {
+    const dirs = [
+        paths.plyr.output,
+        paths.demo.output,
+    ].map(dir => path.join(dir, '**/*'));
+
+    // Don't delete the mp4
+    dirs.push(`!${path.join(paths.plyr.output, '**/*.mp4')}`);
+
+    del(dirs);
+});
+
 const build = {
     js(files, bundle, options) {
         Object.keys(files).forEach(key => {
-            const name = `js-${key}`;
+            const name = `js:${key}`;
             tasks.js.push(name);
 
             gulp.task(name, () =>
@@ -118,7 +123,12 @@ const build = {
                     .pipe(
                         rollup(
                             {
-                                plugins: [resolve(), commonjs(), babel(babelrc), uglify({}, minify)],
+                                plugins: [
+                                    resolve(),
+                                    commonjs(),
+                                    babel(babelrc),
+                                    uglify({}, minify),
+                                ],
                             },
                             options
                         )
@@ -129,32 +139,14 @@ const build = {
             );
         });
     },
-    less(files, bundle) {
+    sass(files, bundle) {
         Object.keys(files).forEach(key => {
-            const name = `less-${key}`;
-            tasks.less.push(name);
+            const name = `sass:${key}`;
+            tasks.sass.push(name);
 
             gulp.task(name, () =>
                 gulp
-                    .src(bundles[bundle].less[key])
-                    .pipe(less())
-                    .on('error', gutil.log)
-                    .pipe(concat(key))
-                    .pipe(prefix(browsers, { cascade: false }))
-                    .pipe(cleancss())
-                    .pipe(size(sizeOptions))
-                    .pipe(gulp.dest(paths[bundle].output))
-            );
-        });
-    },
-    scss(files, bundle) {
-        Object.keys(files).forEach(key => {
-            const name = `scss-${key}`;
-            tasks.scss.push(name);
-
-            gulp.task(name, () =>
-                gulp
-                    .src(bundles[bundle].scss[key])
+                    .src(bundles[bundle].sass[key])
                     .pipe(sass())
                     .on('error', gutil.log)
                     .pipe(concat(key))
@@ -166,7 +158,7 @@ const build = {
         });
     },
     sprite(bundle) {
-        const name = `sprite-${bundle}`;
+        const name = `svg:sprite:${bundle}`;
         tasks.sprite.push(name);
 
         // Process Icons
@@ -175,11 +167,9 @@ const build = {
                 .src(paths[bundle].src.sprite)
                 .pipe(
                     svgmin({
-                        plugins: [
-                            {
-                                removeDesc: true,
-                            },
-                        ],
+                        plugins: [{
+                            removeDesc: true,
+                        }],
                     })
                 )
                 .pipe(svgstore())
@@ -192,13 +182,11 @@ const build = {
 
 // Plyr core files
 build.js(bundles.plyr.js, 'plyr', { name: 'Plyr', format: 'umd' });
-
-build.less(bundles.plyr.less, 'plyr');
-build.scss(bundles.plyr.scss, 'plyr');
+build.sass(bundles.plyr.sass, 'plyr');
 build.sprite('plyr');
 
 // Demo files
-build.less(bundles.demo.less, 'demo');
+build.sass(bundles.demo.sass, 'demo');
 build.js(bundles.demo.js, 'demo', { format: 'es' });
 
 // Build all JS
@@ -206,33 +194,25 @@ gulp.task('js', () => {
     run(tasks.js);
 });
 
-// Build SCSS (for testing, default is LESS)
-gulp.task('scss', () => {
-    run(tasks.scss);
-});
-
 // Watch for file changes
 gulp.task('watch', () => {
     // Plyr core
     gulp.watch(paths.plyr.src.js, tasks.js);
-    gulp.watch(paths.plyr.src.less, tasks.less);
+    gulp.watch(paths.plyr.src.sass, tasks.sass);
     gulp.watch(paths.plyr.src.sprite, tasks.sprite);
 
     // Demo
     gulp.watch(paths.demo.src.js, tasks.js);
-    gulp.watch(paths.demo.src.less, tasks.less);
+    gulp.watch(paths.demo.src.sass, tasks.sass);
 });
 
 // Default gulp task
 gulp.task('default', () => {
-    run(tasks.js, tasks.less, tasks.sprite, 'watch');
+    run(tasks.clean, tasks.js, tasks.sass, tasks.sprite, 'watch');
 });
 
 // Publish a version to CDN and demo
 // --------------------------------------------
-
-// Some options
-const aws = loadJSON(path.join(root, 'aws.json'));
 const { version } = pkg;
 const maxAge = 31536000; // 1 year
 const options = {
@@ -261,8 +241,7 @@ const options = {
 
 // If aws is setup
 if ('cdn' in aws) {
-    const regex =
-        '(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*).(?:0|[1-9][0-9]*)(?:-[\\da-z\\-]+(?:.[\\da-z\\-]+)*)?(?:\\+[\\da-z\\-]+(?:.[\\da-z\\-]+)*)?';
+    const regex = '(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*).(?:0|[1-9][0-9]*)(?:-[\\da-z\\-]+(?:.[\\da-z\\-]+)*)?(?:\\+[\\da-z\\-]+(?:.[\\da-z\\-]+)*)?';
     const cdnpath = new RegExp(`${aws.cdn.domain}/${regex}`, 'gi');
     const semver = new RegExp(`v${regex}`, 'gi');
     const localPath = new RegExp('(../)?dist', 'gi');
@@ -283,7 +262,8 @@ if ('cdn' in aws) {
             )
             .pipe(
                 rename(p => {
-                    p.dirname = path.dirname.replace('.', version);
+                    // eslint-disable-next-line
+                    p.dirname = p.dirname.replace('.', version);
                 })
             )
             .pipe(replace(localPath, versionPath))
@@ -360,6 +340,6 @@ if ('cdn' in aws) {
 
     // Do everything
     gulp.task('publish', () => {
-        run(tasks.js, tasks.less, tasks.sprite, 'cdn', 'demo');
+        run(tasks.clean, tasks.js, tasks.sass, tasks.sprite, 'cdn', 'demo');
     });
 }

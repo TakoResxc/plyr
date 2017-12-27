@@ -12,7 +12,13 @@ const prefix = (() => {
         value = '';
     } else {
         // Check for fullscreen support by vendor prefix
-        ['webkit', 'o', 'moz', 'ms', 'khtml'].some(pre => {
+        [
+            'webkit',
+            'o',
+            'moz',
+            'ms',
+            'khtml',
+        ].some(pre => {
             if (utils.is.function(document[`${pre}CancelFullScreen`])) {
                 value = pre;
                 return true;
@@ -35,11 +41,7 @@ const fullscreen = {
     prefix,
 
     // Check if we can use it
-    enabled:
-        document.fullscreenEnabled ||
-        document.webkitFullscreenEnabled ||
-        document.mozFullScreenEnabled ||
-        document.msFullscreenEnabled,
+    enabled: document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled || document.msFullscreenEnabled,
 
     // Yet again Microsoft awesomeness,
     // Sometimes the prefix is 'ms', sometimes 'MS' to keep you on your toes
@@ -51,7 +53,7 @@ const fullscreen = {
             return false;
         }
 
-        const target = utils.is.undefined(element) ? document.body : element;
+        const target = utils.is.nullOrUndefined(element) ? document.body : element;
 
         switch (prefix) {
             case '':
@@ -71,11 +73,9 @@ const fullscreen = {
             return false;
         }
 
-        const target = utils.is.undefined(element) ? document.body : element;
+        const target = utils.is.nullOrUndefined(element) ? document.body : element;
 
-        return !prefix.length
-            ? target.requestFullScreen()
-            : target[prefix + (prefix === 'ms' ? 'RequestFullscreen' : 'RequestFullScreen')]();
+        return !prefix.length ? target.requestFullScreen() : target[prefix + (prefix === 'ms' ? 'RequestFullscreen' : 'RequestFullScreen')]();
     },
 
     // Bail from fullscreen
@@ -84,9 +84,7 @@ const fullscreen = {
             return false;
         }
 
-        return !prefix.length
-            ? document.cancelFullScreen()
-            : document[prefix + (prefix === 'ms' ? 'ExitFullscreen' : 'CancelFullScreen')]();
+        return !prefix.length ? document.cancelFullScreen() : document[prefix + (prefix === 'ms' ? 'ExitFullscreen' : 'CancelFullScreen')]();
     },
 
     // Get the current element
@@ -100,7 +98,7 @@ const fullscreen = {
 
     // Setup fullscreen
     setup() {
-        if (!this.supported.ui || this.type === 'audio' || !this.config.fullscreen.enabled) {
+        if (!this.supported.ui || this.isAudio || !this.config.fullscreen.enabled) {
             return;
         }
 
@@ -108,12 +106,12 @@ const fullscreen = {
         const nativeSupport = fullscreen.enabled;
 
         if (nativeSupport || (this.config.fullscreen.fallback && !utils.inFrame())) {
-            this.log(`${nativeSupport ? 'Native' : 'Fallback'} fullscreen enabled`);
+            this.debug.log(`${nativeSupport ? 'Native' : 'Fallback'} fullscreen enabled`);
 
             // Add styling hook to show button
             utils.toggleClass(this.elements.container, this.config.classNames.fullscreen.enabled, true);
         } else {
-            this.log('Fullscreen not supported and fallback disabled');
+            this.debug.log('Fullscreen not supported and fallback disabled');
         }
 
         // Toggle state

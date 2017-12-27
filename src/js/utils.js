@@ -7,6 +7,9 @@ import support from './support';
 const utils = {
     // Check variable types
     is: {
+        plyr(input) {
+            return this.instanceof(input, Plyr);
+        },
         object(input) {
             return this.getConstructor(input) === Object;
         },
@@ -23,45 +26,44 @@ const utils = {
             return this.getConstructor(input) === Function;
         },
         array(input) {
-            return !this.undefined(input) && Array.isArray(input);
+            return !this.nullOrUndefined(input) && Array.isArray(input);
+        },
+        weakMap(input) {
+            return this.instanceof(input, window.WeakMap);
         },
         nodeList(input) {
-            return !this.undefined(input) && input instanceof NodeList;
+            return this.instanceof(input, window.NodeList);
         },
-        htmlElement(input) {
-            return !this.undefined(input) && input instanceof HTMLElement;
+        element(input) {
+            return this.instanceof(input, window.Element);
+        },
+        textNode(input) {
+            return this.getConstructor(input) === Text;
         },
         event(input) {
-            return !this.undefined(input) && input instanceof Event;
+            return this.instanceof(input, window.Event);
         },
         cue(input) {
-            return this.instanceOf(input, window.TextTrackCue) || this.instanceOf(input, window.VTTCue);
+            return this.instanceof(input, window.TextTrackCue) || this.instanceof(input, window.VTTCue);
         },
         track(input) {
-            return (
-                !this.undefined(input) && (this.instanceOf(input, window.TextTrack) || typeof input.kind === 'string')
-            );
+            return this.instanceof(input, TextTrack) || (!this.nullOrUndefined(input) && this.string(input.kind));
         },
-        undefined(input) {
-            return input !== null && typeof input === 'undefined';
+        nullOrUndefined(input) {
+            return input === null || typeof input === 'undefined';
         },
         empty(input) {
             return (
-                input === null ||
-                typeof input === 'undefined' ||
-                ((this.string(input) || this.array(input) || this.nodeList(input)) && input.length === 0) ||
-                (this.object(input) && Object.keys(input).length === 0)
+                this.nullOrUndefined(input) ||
+                ((this.string(input) || this.array(input) || this.nodeList(input)) && !input.length) ||
+                (this.object(input) && !Object.keys(input).length)
             );
         },
-        getConstructor(input) {
-            if (input === null || typeof input === 'undefined') {
-                return null;
-            }
-
-            return input.constructor;
-        },
-        instanceOf(input, constructor) {
+        instanceof(input, constructor) {
             return Boolean(input && constructor && input instanceof constructor);
+        },
+        getConstructor(input) {
+            return !this.nullOrUndefined(input) ? input.constructor : null;
         },
     },
 
@@ -76,17 +78,104 @@ const utils = {
     },
 
     // Load an external script
-    loadScript(url) {
-        // Check script is not already referenced
-        if (document.querySelectorAll(`script[src="${url}"]`).length) {
+    loadScript(url, callback) {
+        const current = document.querySelector(`script[src="${url}"]`);
+
+        // Check script is not already referenced, if so wait for load
+        if (current !== null) {
+            current.callbacks = current.callbacks || [];
+            current.callbacks.push(callback);
             return;
         }
 
-        const tag = document.createElement('script');
-        tag.src = url;
+        // Build the element
+        const element = document.createElement('script');
 
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        // Callback queue
+        element.callbacks = element.callbacks || [];
+        element.callbacks.push(callback);
+
+        // Bind callback
+        if (utils.is.function(callback)) {
+            element.addEventListener(
+                'load',
+                event => {
+                    element.callbacks.forEach(cb => cb.call(null, event));
+                    element.callbacks = null;
+                },
+                false
+            );
+        }
+
+        // Set the URL after binding callback
+        element.src = url;
+
+        // Inject
+        const first = document.getElementsByTagName('script')[0];
+        first.parentNode.insertBefore(element, first);
+    },
+
+    // Load an external SVG sprite
+    loadSprite(url, id) {
+        if (!utils.is.string(url)) {
+            return;
+        }
+
+        const prefix = 'cache-';
+        const hasId = utils.is.string(id);
+        let isCached = false;
+
+        function updateSprite(data) {
+            // Inject content
+            this.innerHTML = data;
+
+            // Inject the SVG to the body
+            document.body.insertBefore(this, document.body.childNodes[0]);
+        }
+
+        // Only load once
+        if (!hasId || !document.querySelectorAll(`#${id}`).length) {
+            // Create container
+            const container = document.createElement('div');
+            utils.toggleHidden(container, true);
+
+            if (hasId) {
+                container.setAttribute('id', id);
+            }
+
+            // Check in cache
+            if (support.storage) {
+                const cached = window.localStorage.getItem(prefix + id);
+                isCached = cached !== null;
+
+                if (isCached) {
+                    const data = JSON.parse(cached);
+                    updateSprite.call(container, data.content);
+                    return;
+                }
+            }
+
+            // Get the sprite
+            fetch(url)
+                .then(response => (response.ok ? response.text() : null))
+                .then(text => {
+                    if (text === null) {
+                        return;
+                    }
+
+                    if (support.storage) {
+                        window.localStorage.setItem(
+                            prefix + id,
+                            JSON.stringify({
+                                content: text,
+                            })
+                        );
+                    }
+
+                    updateSprite.call(container, text);
+                })
+                .catch(() => {});
+        }
     },
 
     // Generate a random ID
@@ -134,22 +223,6 @@ const utils = {
             });
     },
 
-    // Remove an element
-    removeElement(element) {
-        if (!utils.is.htmlElement(element) || !utils.is.htmlElement(element.parentNode)) {
-            return null;
-        }
-
-        element.parentNode.removeChild(element);
-
-        return element;
-    },
-
-    // Inaert an element after another
-    insertAfter(element, target) {
-        target.parentNode.insertBefore(element, target.nextSibling);
-    },
-
     // Create a DocumentFragment
     createElement(type, attributes, text) {
         // Create a new <element>
@@ -169,10 +242,26 @@ const utils = {
         return element;
     },
 
+    // Inaert an element after another
+    insertAfter(element, target) {
+        target.parentNode.insertBefore(element, target.nextSibling);
+    },
+
     // Insert a DocumentFragment
     insertElement(type, parent, attributes, text) {
         // Inject the new <element>
         parent.appendChild(utils.createElement(type, attributes, text));
+    },
+
+    // Remove an element
+    removeElement(element) {
+        if (!utils.is.element(element) || !utils.is.element(element.parentNode)) {
+            return null;
+        }
+
+        element.parentNode.removeChild(element);
+
+        return element;
     },
 
     // Remove all child elements
@@ -187,6 +276,10 @@ const utils = {
 
     // Set attributes
     setAttributes(element, attributes) {
+        if (!utils.is.element(element) || utils.is.empty(attributes)) {
+            return;
+        }
+
         Object.keys(attributes).forEach(key => {
             element.setAttribute(key, attributes[key]);
         });
@@ -251,7 +344,7 @@ const utils = {
 
     // Toggle class on an element
     toggleClass(element, className, toggle) {
-        if (utils.is.htmlElement(element)) {
+        if (utils.is.element(element)) {
             const contains = element.classList.contains(className);
 
             element.classList[toggle ? 'add' : 'remove'](className);
@@ -264,7 +357,20 @@ const utils = {
 
     // Has class name
     hasClass(element, className) {
-        return utils.is.htmlElement(element) && element.classList.contains(className);
+        return utils.is.element(element) && element.classList.contains(className);
+    },
+
+    // Toggle hidden attribute on an element
+    toggleHidden(element, toggle) {
+        if (!utils.is.element(element)) {
+            return;
+        }
+
+        if (toggle) {
+            element.setAttribute('hidden', '');
+        } else {
+            element.removeAttribute('hidden');
+        }
     },
 
     // Element matches selector
@@ -275,12 +381,7 @@ const utils = {
             return Array.from(document.querySelectorAll(selector)).includes(this);
         }
 
-        const matches =
-            prototype.matches ||
-            prototype.webkitMatchesSelector ||
-            prototype.mozMatchesSelector ||
-            prototype.msMatchesSelector ||
-            match;
+        const matches = prototype.matches || prototype.webkitMatchesSelector || prototype.mozMatchesSelector || prototype.msMatchesSelector || match;
 
         return matches.call(element, selector);
     },
@@ -334,16 +435,14 @@ const utils = {
             };
 
             // Seek tooltip
-            if (utils.is.htmlElement(this.elements.progress)) {
-                this.elements.display.seekTooltip = this.elements.progress.querySelector(
-                    `.${this.config.classNames.tooltip}`
-                );
+            if (utils.is.element(this.elements.progress)) {
+                this.elements.display.seekTooltip = this.elements.progress.querySelector(`.${this.config.classNames.tooltip}`);
             }
 
             return true;
         } catch (error) {
             // Log it
-            this.warn('It looks like there is a problem with your custom controls HTML', error);
+            this.debug.warn('It looks like there is a problem with your custom controls HTML', error);
 
             // Restore native video controls
             this.toggleNativeControls(true);
@@ -367,25 +466,30 @@ const utils = {
 
     // Trap focus inside container
     trapFocus() {
-        const tabbables = utils.getElements.call(this, 'input:not([disabled]), button:not([disabled])');
-        const first = tabbables[0];
-        const last = tabbables[tabbables.length - 1];
+        const focusable = utils.getElements.call(this, 'button:not(:disabled), input:not(:disabled), [tabindex]');
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
 
         utils.on(
             this.elements.container,
             'keydown',
             event => {
-                // If it is tab
-                if (event.which === 9 && this.fullscreen.active) {
-                    if (event.target === last && !event.shiftKey) {
-                        // Move focus to first element that can be tabbed if Shift isn't used
-                        event.preventDefault();
-                        first.focus();
-                    } else if (event.target === first && event.shiftKey) {
-                        // Move focus to last element that can be tabbed if Shift is used
-                        event.preventDefault();
-                        last.focus();
-                    }
+                // Bail if not tab key or not fullscreen
+                if (event.key !== 'Tab' || event.keyCode !== 9 || !this.fullscreen.active) {
+                    return;
+                }
+
+                // Get the current focused element
+                const focused = utils.getFocusElement();
+
+                if (focused === last && !event.shiftKey) {
+                    // Move focus to first element that can be tabbed if Shift isn't used
+                    first.focus();
+                    event.preventDefault();
+                } else if (focused === first && event.shiftKey) {
+                    // Move focus to last element that can be tabbed if Shift is used
+                    last.focus();
+                    event.preventDefault();
                 }
             },
             false
@@ -395,7 +499,7 @@ const utils = {
     // Toggle event listener
     toggleListener(elements, event, callback, toggle, passive, capture) {
         // Bail if no elements
-        if (elements === null || utils.is.undefined(elements)) {
+        if (utils.is.nullOrUndefined(elements)) {
             return;
         }
 
@@ -445,7 +549,7 @@ const utils = {
     },
 
     // Trigger event
-    dispatchEvent(element, type, bubbles, properties) {
+    dispatchEvent(element, type, bubbles, detail) {
         // Bail if no element
         if (!element || !type) {
             return;
@@ -454,7 +558,7 @@ const utils = {
         // Create and dispatch the event
         const event = new CustomEvent(type, {
             bubbles: utils.is.boolean(bubbles) ? bubbles : false,
-            detail: Object.assign({}, properties, {
+            detail: Object.assign({}, detail, {
                 plyr: this instanceof Plyr ? this : null,
             }),
         });
@@ -465,19 +569,18 @@ const utils = {
 
     // Toggle aria-pressed state on a toggle button
     // http://www.ssbbartgroup.com/blog/how-not-to-misuse-aria-states-properties-and-roles
-    toggleState(target, state) {
+    toggleState(element, input) {
         // Bail if no target
-        if (!target) {
-            return null;
+        if (!utils.is.element(element)) {
+            return;
         }
 
         // Get state
-        const newState = utils.is.boolean(state) ? state : !target.getAttribute('aria-pressed');
+        const pressed = element.getAttribute('aria-pressed') === 'true';
+        const state = utils.is.boolean(input) ? input : !pressed;
 
         // Set the attribute on target
-        target.setAttribute('aria-pressed', newState);
-
-        return newState;
+        element.setAttribute('aria-pressed', state);
     },
 
     // Get percentage
@@ -488,45 +591,31 @@ const utils = {
         return (current / max * 100).toFixed(2);
     },
 
-    // Deep extend/merge destination object with N more objects
-    // http://andrewdupont.net/2009/08/28/deep-extending-objects-in-javascript/
-    // Removed call to arguments.callee (used explicit function name instead)
-    extend(...objects) {
-        const { length } = objects;
-
-        // Bail if nothing to merge
-        if (!length) {
-            return null;
+    // Deep extend destination object with N more objects
+    extend(target = {}, ...sources) {
+        if (!sources.length) {
+            return target;
         }
 
-        // Return first if specified but nothing to merge
-        if (length === 1) {
-            return objects[0];
+        const source = sources.shift();
+
+        if (!utils.is.object(source)) {
+            return target;
         }
 
-        // First object is the destination
-        let destination = Array.prototype.shift.call(objects);
-        if (!utils.is.object(destination)) {
-            destination = {};
-        }
-
-        // Loop through all objects to merge
-        objects.forEach(source => {
-            if (!utils.is.object(source)) {
-                return;
-            }
-
-            Object.keys(source).forEach(property => {
-                if (source[property] && source[property].constructor && source[property].constructor === Object) {
-                    destination[property] = destination[property] || {};
-                    utils.extend(destination[property], source[property]);
-                } else {
-                    destination[property] = source[property];
+        Object.keys(source).forEach(key => {
+            if (utils.is.object(source[key])) {
+                if (!Object.keys(target).includes(key)) {
+                    Object.assign(target, { [key]: {} });
                 }
-            });
+
+                utils.extend(target[key], source[key]);
+            } else {
+                Object.assign(target, { [key]: source[key] });
+            }
         });
 
-        return destination;
+        return utils.extend(target, ...sources);
     },
 
     // Parse YouTube ID from URL
@@ -565,71 +654,11 @@ const utils = {
         return fragment.firstChild.innerText;
     },
 
-    // Load an SVG sprite
-    loadSprite(url, id) {
-        if (typeof url !== 'string') {
-            return;
-        }
-
-        const prefix = 'cache-';
-        const hasId = typeof id === 'string';
-        let isCached = false;
-
-        function updateSprite(data) {
-            // Inject content
-            this.innerHTML = data;
-
-            // Inject the SVG to the body
-            document.body.insertBefore(this, document.body.childNodes[0]);
-        }
-
-        // Only load once
-        if (!hasId || !document.querySelectorAll(`#${id}`).length) {
-            // Create container
-            const container = document.createElement('div');
-            container.setAttribute('hidden', '');
-
-            if (hasId) {
-                container.setAttribute('id', id);
-            }
-
-            // Check in cache
-            if (support.storage) {
-                const cached = window.localStorage.getItem(prefix + id);
-                isCached = cached !== null;
-
-                if (isCached) {
-                    const data = JSON.parse(cached);
-                    updateSprite.call(container, data.content);
-                }
-            }
-
-            // ReSharper disable once InconsistentNaming
-            const xhr = new XMLHttpRequest();
-
-            // XHR for Chrome/Firefox/Opera/Safari
-            if ('withCredentials' in xhr) {
-                xhr.open('GET', url, true);
-            } else {
-                return;
-            }
-
-            // Once loaded, inject to container and body
-            xhr.onload = () => {
-                if (support.storage) {
-                    window.localStorage.setItem(
-                        prefix + id,
-                        JSON.stringify({
-                            content: xhr.responseText,
-                        })
-                    );
-                }
-
-                updateSprite.call(container, xhr.responseText);
-            };
-
-            xhr.send();
-        }
+    // Get aspect ratio for dimensions
+    getAspectRatio(width, height) {
+        const getRatio = (w, h) => (h === 0 ? w : getRatio(h, w % h));
+        const ratio = getRatio(width, height);
+        return `${width / ratio}:${height / ratio}`;
     },
 
     // Get the transition end event
@@ -647,6 +676,15 @@ const utils = {
 
         return typeof type === 'string' ? type : false;
     })(),
+
+    // Force repaint of element
+    repaint(element) {
+        window.setTimeout(() => {
+            element.setAttribute('hidden', '');
+            element.offsetHeight; // eslint-disable-line
+            element.removeAttribute('hidden');
+        }, 0);
+    },
 };
 
 export default utils;

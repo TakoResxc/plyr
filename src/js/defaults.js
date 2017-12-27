@@ -12,6 +12,9 @@ const defaults = {
     // Auto play (if supported)
     autoplay: false,
 
+    // Only allow one media playing at once (vimeo only)
+    autopause: true,
+
     // Default time to skip when rewind/fast forward
     seekTime: 10,
 
@@ -19,10 +22,23 @@ const defaults = {
     volume: 1,
     muted: false,
 
-    // Display the media duration
+    // Pass a custom duration
+    duration: null,
+
+    // Display the media duration on load in the current time position
+    // If you have opted to display both duration and currentTime, this is ignored
     displayDuration: true,
 
-    // Click video to play
+    // Invert the current time to be a countdown
+    invertTime: true,
+
+    // Clicking the currentTime inverts it's value to show time left rather than elapsed
+    toggleInvert: true,
+
+    // Aspect ratio (for embeds)
+    ratio: '16:9',
+
+    // Click video container to play/pause
     clickToPlay: true,
 
     // Auto hide the controls
@@ -42,26 +58,41 @@ const defaults = {
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
 
-    // Pass a custom duration
-    duration: null,
-
     // Quality default
     quality: {
         default: 'default',
-        options: ['hd2160', 'hd1440', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny', 'default'],
+        options: [
+            'hd2160',
+            'hd1440',
+            'hd1080',
+            'hd720',
+            'large',
+            'medium',
+            'small',
+            'tiny',
+            'default',
+        ],
     },
 
     // Set loops
     loop: {
         active: false,
-        start: null,
-        end: null,
+        // start: null,
+        // end: null,
     },
 
     // Speed default and options to display
     speed: {
-        default: 1,
-        options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+        selected: 1,
+        options: [
+            0.5,
+            0.75,
+            1,
+            1.25,
+            1.5,
+            1.75,
+            2,
+        ],
     },
 
     // Keyboard shortcut settings
@@ -109,7 +140,11 @@ const defaults = {
         'cast',
         'fullscreen',
     ],
-    settings: ['captions', 'quality', 'speed', 'loop'],
+    settings: [
+        'captions',
+        'quality',
+        'speed',
+    ],
 
     // Localisation
     i18n: {
@@ -124,9 +159,12 @@ const defaults = {
         currentTime: 'Current time',
         duration: 'Duration',
         volume: 'Volume',
-        toggleMute: 'Toggle Mute',
-        toggleCaptions: 'Toggle Captions',
-        toggleFullscreen: 'Toggle Fullscreen',
+        mute: 'Mute',
+        unmute: 'Unmute',
+        enableCaptions: 'Enable captions',
+        disableCaptions: 'Disable captions',
+        enterFullscreen: 'Enter fullscreen',
+        exitFullscreen: 'Exit fullscreen',
         toggleCast: 'Google Cast',
         frameTitle: 'Player for {title}',
         captions: 'Captions',
@@ -203,7 +241,7 @@ const defaults = {
         'exitfullscreen',
         'captionsenabled',
         'captionsdisabled',
-        'captionchange',
+        'languagechange',
         'controlshidden',
         'controlsshown',
         'ready',
@@ -268,9 +306,9 @@ const defaults = {
         embed: 'plyr__video-embed',
         control: 'plyr__control',
         type: 'plyr--{0}',
+        provider: 'plyr--{0}',
         stopped: 'plyr--stopped',
         playing: 'plyr--playing',
-        muted: 'plyr--muted',
         loading: 'plyr--loading',
         hover: 'plyr--hover',
         tooltip: 'plyr__tooltip',
@@ -279,9 +317,11 @@ const defaults = {
         isIos: 'plyr--is-ios',
         isTouch: 'plyr--is-touch',
         uiSupported: 'plyr--full-ui',
+        noTransition: 'plyr--no-transition',
         menu: {
             value: 'plyr__menu__value',
             badge: 'plyr__badge',
+            open: 'plyr--menu-open',
         },
         captions: {
             enabled: 'plyr--captions-enabled',
@@ -304,6 +344,11 @@ const defaults = {
             enabled: 'plyr--cast-enabled',
             active: 'plyr--cast-active',
         },
+    },
+
+    // API keys
+    keys: {
+        google: null,
     },
 };
 

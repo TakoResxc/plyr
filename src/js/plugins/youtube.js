@@ -11,14 +11,17 @@ const youtube = {
         const videoId = utils.parseYouTubeId(this.embedId);
 
         // Remove old containers
-        const containers = utils.getElements.call(this, `[id^="${this.type}-"]`);
+        const containers = utils.getElements.call(this, `[id^="${this.provider}-"]`);
         Array.from(containers).forEach(utils.removeElement);
 
         // Add embed class for responsive
         utils.toggleClass(this.elements.wrapper, this.config.classNames.embed, true);
 
+        // Set aspect ratio
+        youtube.setAspectRatio.call(this);
+
         // Set ID
-        this.media.setAttribute('id', utils.generateId(this.type));
+        this.media.setAttribute('id', utils.generateId(this.provider));
 
         // Setup API
         if (utils.is.object(window.YT)) {
@@ -28,6 +31,7 @@ const youtube = {
             utils.loadScript(this.config.urls.youtube.api);
 
             // Setup callback for the API
+            // YouTube has it's own system of course...
             window.onYouTubeReadyCallbacks = window.onYouTubeReadyCallbacks || [];
 
             // Add to queue
@@ -42,6 +46,45 @@ const youtube = {
                 });
             };
         }
+    },
+
+    // Get the media title
+    getTitle() {
+        // Try via undocumented API method first
+        // This method disappears now and then though...
+        // https://github.com/sampotts/plyr/issues/709
+        if (utils.is.function(this.embed.getVideoData)) {
+            const { title } = this.embed.getVideoData();
+
+            if (utils.is.empty(title)) {
+                this.config.title = title;
+                ui.setTitle.call(this);
+                return;
+            }
+        }
+
+        // Or via Google API
+        const key = this.config.keys.google;
+        const videoId = utils.parseYouTubeId(this.embedId);
+        if (utils.is.string(key) && !utils.is.empty(key)) {
+            const url = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${key}&fields=items(snippet(title))&part=snippet`;
+
+            fetch(url)
+                .then(response => (response.ok ? response.json() : null))
+                .then(result => {
+                    if (result !== null && utils.is.object(result)) {
+                        this.config.title = result.items[0].snippet.title;
+                        ui.setTitle.call(this);
+                    }
+                })
+                .catch(() => {});
+        }
+    },
+
+    // Set aspect ratio
+    setAspectRatio() {
+        const ratio = this.config.ratio.split(':');
+        this.elements.wrapper.style.paddingBottom = `${100 / ratio[0] * ratio[1]}%`;
     },
 
     // API ready
@@ -66,16 +109,52 @@ const youtube = {
                 origin: window && window.location.hostname,
                 widget_referrer: window && window.location.href,
 
-                // Captions is flaky on YouTube
-                // cc_load_policy: (this.captions.active ? 1 : 0),
-                // cc_lang_pref: 'en',
+                // Captions are flaky on YouTube
+                cc_load_policy: this.captions.active ? 1 : 0,
+                cc_lang_pref: this.config.captions.language,
             },
             events: {
                 onError(event) {
-                    utils.dispatchEvent.call(player, player.media, 'error', true, {
+                    // If we've already fired an error, don't do it again
+                    // YouTube fires onError twice
+                    if (utils.is.object(player.media.error)) {
+                        return;
+                    }
+
+                    const detail = {
                         code: event.data,
-                        embed: event.target,
-                    });
+                    };
+
+                    // Messages copied from https://developers.google.com/youtube/iframe_api_reference#onError
+                    switch (event.data) {
+                        case 2:
+                            detail.message =
+                                'The request contains an invalid parameter value. For example, this error occurs if you specify a video ID that does not have 11 characters, or if the video ID contains invalid characters, such as exclamation points or asterisks.';
+                            break;
+
+                        case 5:
+                            detail.message =
+                                'The requested content cannot be played in an HTML5 player or another error related to the HTML5 player has occurred.';
+                            break;
+
+                        case 100:
+                            detail.message =
+                                'The video requested was not found. This error occurs when a video has been removed (for any reason) or has been marked as private.';
+                            break;
+
+                        case 101:
+                        case 150:
+                            detail.message = 'The owner of the requested video does not allow it to be played in embedded players.';
+                            break;
+
+                        default:
+                            detail.message = 'An unknown error occured';
+                            break;
+                    }
+
+                    player.media.error = detail;
+
+                    utils.dispatchEvent.call(player, player.media, 'error');
                 },
                 onPlaybackQualityChange(event) {
                     // Get the instance
@@ -99,25 +178,30 @@ const youtube = {
                     // Get the instance
                     const instance = event.target;
 
+                    // Get the title
+                    youtube.getTitle.call(player);
+
                     // Create a faux HTML5 API using the YouTube API
                     player.media.play = () => {
                         instance.playVideo();
                         player.media.paused = false;
                     };
+
                     player.media.pause = () => {
                         instance.pauseVideo();
                         player.media.paused = true;
                     };
+
                     player.media.stop = () => {
                         instance.stopVideo();
                         player.media.paused = true;
                     };
+
                     player.media.duration = instance.getDuration();
                     player.media.paused = true;
-                    player.media.muted = instance.isMuted();
-                    player.media.currentTime = 0;
 
                     // Seeking
+                    player.media.currentTime = 0;
                     Object.defineProperty(player.media, 'currentTime', {
                         get() {
                             return Number(instance.getCurrentTime());
@@ -144,8 +228,23 @@ const youtube = {
                         },
                     });
 
+                    // Quality
+                    Object.defineProperty(player.media, 'quality', {
+                        get() {
+                            return instance.getPlaybackQuality();
+                        },
+                        set(input) {
+                            // Trigger request event
+                            utils.dispatchEvent.call(player, player.media, 'qualityrequested', false, {
+                                quality: input,
+                            });
+
+                            instance.setPlaybackQuality(input);
+                        },
+                    });
+
                     // Volume
-                    let volume = instance.getVolume() / 100;
+                    let { volume } = player.config;
                     Object.defineProperty(player.media, 'volume', {
                         get() {
                             return volume;
@@ -158,12 +257,14 @@ const youtube = {
                     });
 
                     // Muted
+                    let { muted } = player.config;
                     Object.defineProperty(player.media, 'muted', {
                         get() {
-                            return instance.isMuted();
+                            return muted;
                         },
                         set(input) {
-                            const toggle = utils.is.boolean(input) ? input : false;
+                            const toggle = utils.is.boolean(input) ? input : muted;
+                            muted = toggle;
                             instance[toggle ? 'mute' : 'unMute']();
                             utils.dispatchEvent.call(player, player.media, 'volumechange');
                         },
@@ -176,13 +277,15 @@ const youtube = {
                         },
                     });
 
-                    // Get available speeds
-                    if (player.config.controls.includes('settings') && player.config.settings.includes('speed')) {
-                        controls.setSpeedMenu.call(player, instance.getAvailablePlaybackRates());
-                    }
+                    // Ended
+                    Object.defineProperty(player.media, 'ended', {
+                        get() {
+                            return player.currentTime === player.duration;
+                        },
+                    });
 
-                    // Set title
-                    player.config.title = instance.getVideoData().title;
+                    // Get available speeds
+                    player.options.speed = instance.getAvailablePlaybackRates();
 
                     // Set the tabindex to avoid focus entering iframe
                     if (player.supported.ui) {
@@ -236,32 +339,32 @@ const youtube = {
                     // 5    Video cued
                     switch (event.data) {
                         case 0:
+                            player.media.paused = true;
+
                             // YouTube doesn't support loop for a single video, so mimick it.
-                            if (player.config.loop.active) {
+                            if (player.media.loop) {
                                 // YouTube needs a call to `stopVideo` before playing again
                                 instance.stopVideo();
                                 instance.playVideo();
-
-                                break;
+                            } else {
+                                utils.dispatchEvent.call(player, player.media, 'ended');
                             }
-
-                            player.media.paused = true;
-
-                            utils.dispatchEvent.call(player, player.media, 'ended');
 
                             break;
 
                         case 1:
-                            player.media.paused = false;
-
                             // If we were seeking, fire seeked event
                             if (player.media.seeking) {
                                 utils.dispatchEvent.call(player, player.media, 'seeked');
                             }
-
                             player.media.seeking = false;
 
-                            utils.dispatchEvent.call(player, player.media, 'play');
+                            // Only fire play if paused before
+                            if (player.media.paused) {
+                                utils.dispatchEvent.call(player, player.media, 'play');
+                            }
+                            player.media.paused = false;
+
                             utils.dispatchEvent.call(player, player.media, 'playing');
 
                             // Poll to get playback progress

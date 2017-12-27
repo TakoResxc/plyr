@@ -1,24 +1,31 @@
-// ==========================================================================
+﻿// ==========================================================================
 // Plyr
 // plyr.js v3.0.0
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
 
+import { providers, types } from './types';
 import defaults from './defaults';
-import types from './types';
 import support from './support';
 import utils from './utils';
+
+import Console from './console';
+import Storage from './storage';
 
 import captions from './captions';
 import controls from './controls';
 import fullscreen from './fullscreen';
+import listeners from './listeners';
 import media from './media';
-import storage from './storage';
 import source from './source';
 import googleCast from './plugins/google-cast';
 
 import ui from './ui';
+
+// Private properties
+// TODO: Use a WeakMap for private globals
+// const globals = new WeakMap();
 
 // Globals
 let scrollPosition = {
@@ -41,11 +48,7 @@ class Plyr {
         }
 
         // jQuery, NodeList or Array passed, use first element
-        if (
-            (window.jQuery && this.media instanceof jQuery) ||
-            utils.is.nodeList(this.media) ||
-            utils.is.array(this.media)
-        ) {
+        if ((window.jQuery && this.media instanceof jQuery) || utils.is.nodeList(this.media) || utils.is.array(this.media)) {
             // eslint-disable-next-line
             this.media = this.media[0];
         }
@@ -57,9 +60,9 @@ class Plyr {
             options,
             (() => {
                 try {
-                    return JSON.parse(this.media.getAttribute('data-plyr'));
+                    return JSON.parse(this.media.getAttribute('data-plyr-config'));
                 } catch (e) {
-                    return null;
+                    return {};
                 }
             })()
         );
@@ -80,10 +83,8 @@ class Plyr {
         };
 
         // Captions
-        // TODO: captions.enabled should be in config?
         this.captions = {
-            enabled: null,
-            tracks: null,
+            active: null,
             currentTrack: null,
         };
 
@@ -99,42 +100,35 @@ class Plyr {
         };
 
         // Debugging
-        this.log = () => {};
-        this.warn = () => {};
-        this.error = () => {};
-        if (this.config.debug && 'console' in window) {
-            this.log = console.log; // eslint-disable-line
-            this.warn = console.warn; // eslint-disable-line
-            this.error = console.error; // eslint-disable-line
-            this.log('Debugging enabled');
-        }
+        // TODO: move to globals
+        this.debug = new Console(this);
 
         // Log config options and support
-        this.log('Config', this.config);
-        this.log('Support', support);
+        this.debug.log('Config', this.config);
+        this.debug.log('Support', support);
 
         // We need an element to setup
-        if (this.media === null || utils.is.undefined(this.media) || !utils.is.htmlElement(this.media)) {
-            this.error('Setup failed: no suitable element passed');
+        if (utils.is.nullOrUndefined(this.media) || !utils.is.element(this.media)) {
+            this.debug.error('Setup failed: no suitable element passed');
             return;
         }
 
         // Bail if the element is initialized
         if (this.media.plyr) {
-            this.warn('Target already setup');
+            this.debug.warn('Target already setup');
             return;
         }
 
         // Bail if not enabled
         if (!this.config.enabled) {
-            this.error('Setup failed: disabled by config');
+            this.debug.error('Setup failed: disabled by config');
             return;
         }
 
         // Bail if disabled or no basic support
         // You may want to disable certain UAs etc
         if (!support.check().api) {
-            this.error('Setup failed: no support');
+            this.debug.error('Setup failed: no support');
             return;
         }
 
@@ -145,67 +139,79 @@ class Plyr {
         // Supported: video, audio, vimeo, youtube
         const type = this.media.tagName.toLowerCase();
 
+        // Embed attributes
+        const attributes = {
+            provider: 'data-plyr-provider',
+            id: 'data-plyr-embed-id',
+        };
+
         // Different setup based on type
         switch (type) {
             // TODO: Handle passing an iframe for true progressive enhancement
             // case 'iframe':
             case 'div':
-                this.type = this.media.getAttribute('data-type');
-                this.embedId = this.media.getAttribute('data-video-id');
+                this.type = types.video; // Audio will come later for external providers
+                this.provider = this.media.getAttribute(attributes.provider);
+                this.embedId = this.media.getAttribute(attributes.id);
 
-                if (utils.is.empty(this.type)) {
-                    this.error('Setup failed: embed type missing');
+                if (utils.is.empty(this.provider) || !Object.keys(providers).includes(this.provider)) {
+                    this.debug.error('Setup failed: Invalid provider');
                     return;
                 }
 
+                // Try and get the embed id
                 if (utils.is.empty(this.embedId)) {
-                    this.error('Setup failed: video id missing');
+                    this.debug.error('Setup failed: Embed ID or URL missing');
                     return;
                 }
 
                 // Clean up
-                this.media.removeAttribute('data-type');
-                this.media.removeAttribute('data-video-id');
+                this.media.removeAttribute(attributes.provider);
+                this.media.removeAttribute(attributes.id);
+
                 break;
 
             case 'video':
             case 'audio':
                 this.type = type;
+                this.provider = providers.html5;
 
-                if (this.media.getAttribute('crossorigin') !== null) {
+                if (this.media.hasAttribute('crossorigin')) {
                     this.config.crossorigin = true;
                 }
-                if (this.media.getAttribute('autoplay') !== null) {
+
+                if (this.media.hasAttribute('autoplay')) {
                     this.config.autoplay = true;
                 }
-                if (this.media.getAttribute('playsinline') !== null) {
+
+                if (this.media.hasAttribute('playsinline')) {
                     this.config.inline = true;
                 }
-                if (this.media.getAttribute('muted') !== null) {
+
+                if (this.media.hasAttribute('muted')) {
                     this.config.muted = true;
                 }
-                if (this.media.getAttribute('loop') !== null) {
+
+                if (this.media.hasAttribute('loop')) {
                     this.config.loop.active = true;
                 }
+
                 break;
 
             default:
-                this.error('Setup failed: unsupported type');
+                this.debug.error('Setup failed: unsupported type');
                 return;
         }
 
-        // Sniff out the browser
-        this.browser = utils.getBrowser();
-
-        // Load saved settings from localStorage
-        storage.setup.call(this);
+        // Setup local storage for user settings
+        this.storage = new Storage(this);
 
         // Check for support again but with type
-        this.supported = support.check(this.type, this.config.inline);
+        this.supported = support.check(this.type, this.provider, this.config.inline);
 
         // If no support for even API, bail
         if (!this.supported.api) {
-            this.error('Setup failed: no support');
+            this.debug.error('Setup failed: no support');
             return;
         }
 
@@ -219,6 +225,9 @@ class Plyr {
         // Allow focus to be captured
         this.elements.container.setAttribute('tabindex', 0);
 
+        // Global listeners
+        listeners.global.call(this);
+
         // Add style hook
         ui.addStyleHook.call(this);
 
@@ -228,7 +237,7 @@ class Plyr {
         // Listen for events if debugging
         if (this.config.debug) {
             utils.on(this.elements.container, this.config.events.join(' '), event => {
-                this.log(`event: ${event.type}`);
+                this.debug.log(`event: ${event.type}`);
             });
         }
 
@@ -239,71 +248,115 @@ class Plyr {
         }
     }
 
+    // ---------------------------------------
     // API
     // ---------------------------------------
 
+    /**
+     * Types and provider helpers
+     */
     get isHTML5() {
-        return types.html5.includes(this.type);
+        return this.provider === providers.html5;
     }
     get isEmbed() {
-        return types.embed.includes(this.type);
+        return this.isYouTube || this.isVimeo;
+    }
+    get isYouTube() {
+        return this.provider === providers.youtube;
+    }
+    get isVimeo() {
+        return this.provider === providers.vimeo;
+    }
+    get isVideo() {
+        return this.type === types.video;
+    }
+    get isAudio() {
+        return this.type === types.audio;
     }
 
-    // Play
+    /**
+     * Play the media
+     */
     play() {
-        if ('play' in this.media) {
-            this.media.play();
-        }
-
-        // Allow chaining
-        return this;
+        return this.media.play();
     }
 
-    // Pause
+    /**
+     * Pause the media
+     */
     pause() {
-        if ('pause' in this.media) {
-            this.media.pause();
-        }
-
-        // Allow chaining
-        return this;
+        return this.media.pause();
     }
 
-    // Toggle playback
+    /**
+     * Get paused state
+     */
+    get paused() {
+        return this.media.paused;
+    }
+
+    /**
+     * Get playing state
+     */
+    get playing() {
+        return !this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true);
+    }
+
+    /**
+     * Get ended state
+     */
+    get ended() {
+        return this.media.ended;
+    }
+
+    /**
+     * Toggle playback based on current status
+     * @param {boolean} toggle
+     */
     togglePlay(toggle) {
         // True toggle if nothing passed
         if ((!utils.is.boolean(toggle) && this.media.paused) || toggle) {
-            return this.play();
+            this.play();
+        } else {
+            this.pause();
         }
-
-        return this.pause();
     }
 
-    // Stop
+    /**
+     * Stop playback
+     */
     stop() {
-        return this.restart().pause();
+        this.restart();
+        this.pause();
     }
 
-    // Restart
+    /**
+     * Restart playback
+     */
     restart() {
         this.currentTime = 0;
-        return this;
     }
 
-    // Rewind
+    /**
+     * Rewind
+     * @param {number} seekTime - how far to rewind in seconds. Defaults to the config.seekTime
+     */
     rewind(seekTime) {
         this.currentTime = this.currentTime - (utils.is.number(seekTime) ? seekTime : this.config.seekTime);
-        return this;
     }
 
-    // Fast forward
+    /**
+     * Fast forward
+     * @param {number} seekTime - how far to fast forward in seconds. Defaults to the config.seekTime
+     */
     forward(seekTime) {
         this.currentTime = this.currentTime + (utils.is.number(seekTime) ? seekTime : this.config.seekTime);
-        return this;
     }
 
-    // Seek to time
-    // The input parameter can be an event or a number
+    /**
+     * Seek to a time
+     * @param {number} input - where to seek to in seconds. Defaults to 0 (the start)
+     */
     set currentTime(input) {
         let targetTime = 0;
 
@@ -322,14 +375,26 @@ class Plyr {
         this.media.currentTime = targetTime.toFixed(4);
 
         // Logging
-        this.log(`Seeking to ${this.currentTime} seconds`);
+        this.debug.log(`Seeking to ${this.currentTime} seconds`);
     }
 
+    /**
+     * Get current time
+     */
     get currentTime() {
         return Number(this.media.currentTime);
     }
 
-    // Duration
+    /**
+     * Get seeking status
+     */
+    get seeking() {
+        return this.media.seeking;
+    }
+
+    /**
+     * Get the duration of the current media
+     */
     get duration() {
         // Faux duration set via config
         const fauxDuration = parseInt(this.config.duration, 10);
@@ -341,7 +406,10 @@ class Plyr {
         return !Number.isNaN(fauxDuration) ? fauxDuration : realDuration;
     }
 
-    // Volume
+    /**
+     * Set the player volume
+     * @param {number} value - must be between 0 and 1. Defaults to the value from local storage and config.volume if not set in storage
+     */
     set volume(value) {
         let volume = value;
         const max = 1;
@@ -353,7 +421,7 @@ class Plyr {
 
         // Load volume from storage if no value specified
         if (!utils.is.number(volume)) {
-            ({ volume } = storage.get.call(this));
+            volume = this.storage.get('volume');
         }
 
         // Use config if all else fails
@@ -370,55 +438,105 @@ class Plyr {
             volume = min;
         }
 
+        // Update config
+        this.config.volume = volume;
+
         // Set the player volume
         this.media.volume = volume;
 
-        // Toggle muted state
-        if (volume === 0) {
-            this.muted = true;
+        // If muted, and we're increasing volume, reset muted state
+        if (this.muted && volume > 0) {
+            this.muted = false;
         }
     }
 
+    /**
+     * Get the current player volume
+     */
     get volume() {
         return this.media.volume;
     }
 
-    // Increase volume
+    /**
+     * Increase volume
+     * @param {boolean} step - How much to decrease by (between 0 and 1)
+     */
     increaseVolume(step) {
-        const volume = this.media.muted ? 0 : this.media.volume;
-
-        return this.setVolume(volume + utils.is.number(step) ? step : 1);
+        const volume = this.media.muted ? 0 : this.volume;
+        this.volume = volume + (utils.is.number(step) ? step : 1);
     }
 
-    // Decrease volume
+    /**
+     * Decrease volume
+     * @param {boolean} step - How much to decrease by (between 0 and 1)
+     */
     decreaseVolume(step) {
-        const volume = this.media.muted ? 0 : this.media.volume;
-
-        return this.setVolume(volume - utils.is.number(step) ? step : 1);
+        const volume = this.media.muted ? 0 : this.volume;
+        this.volume = volume - (utils.is.number(step) ? step : 1);
     }
 
-    // Toggle mute
+    /**
+     * Set muted state
+     * @param {boolean} mute
+     */
     set muted(mute) {
-        // If the method is called without parameter, toggle based on current value
-        const toggle = utils.is.boolean(mute) ? mute : !this.media.muted;
+        let toggle = mute;
 
-        // Set button state
-        utils.toggleState(this.elements.buttons.mute, toggle);
+        // Load muted state from storage
+        if (!utils.is.boolean(toggle)) {
+            toggle = this.storage.get('muted');
+        }
+
+        // Use config if all else fails
+        if (!utils.is.boolean(toggle)) {
+            toggle = this.config.muted;
+        }
+
+        // Update config
+        this.config.muted = toggle;
 
         // Set mute on the player
         this.media.muted = toggle;
     }
 
+    /**
+     * Get current muted state
+     */
     get muted() {
         return this.media.muted;
     }
 
-    // Playback speed
+    /**
+     * Check if the media has audio
+     */
+    get hasAudio() {
+        // Assume yes for all non HTML5 (as we can't tell...)
+        if (!this.isHTML5) {
+            return true;
+        }
+
+        // Get audio tracks
+        return this.media.mozHasAudio || Boolean(this.media.webkitAudioDecodedByteCount) || Boolean(this.media.audioTracks && this.media.audioTracks.length);
+    }
+
+    /**
+     * Set playback speed
+     * @param {decimal} speed - the speed of playback (0.5-2.0)
+     */
     set speed(input) {
-        // Load speed from storage or default value
-        let speed = utils.is.number(input)
-            ? input
-            : parseFloat(storage.get.call(this).speed || this.speed.selected || this.config.speed.default);
+        let speed = null;
+
+        if (utils.is.number(input)) {
+            speed = input;
+        }
+
+        if (!utils.is.number(speed)) {
+            speed = this.storage.get('speed');
+        }
+
+        if (!utils.is.number(speed)) {
+            speed = this.config.speed.selected;
+        }
 
         // Set min/max
         if (speed < 0.1) {
@@ -429,65 +547,75 @@ class Plyr {
         }
 
         if (!this.config.speed.options.includes(speed)) {
-            this.warn(`Unsupported speed (${speed})`);
+            this.debug.warn(`Unsupported speed (${speed})`);
             return;
         }
+
+        // Update config
+        this.config.speed.selected = speed;
 
         // Set media speed
         this.media.playbackRate = speed;
     }
 
+    /**
+     * Get current playback speed
+     */
     get speed() {
         return this.media.playbackRate;
     }
 
-    // Set playback quality
+    /**
+     * Set playback quality
+     * Currently YouTube only
+     * @param {string} input - Quality level
+     */
     set quality(input) {
-        // Load speed from storage or default value
-        const quality = utils.is.string(input)
-            ? input
-            : parseFloat(storage.get.call(this).quality || this.config.quality.selected);
+        let quality = null;
 
-        if (!this.config.quality.options.includes(quality)) {
-            this.warn(`Unsupported quality option (${quality})`);
+        if (utils.is.string(input)) {
+            quality = input;
+        }
+
+        if (!utils.is.string(quality)) {
+            quality = this.storage.get('quality');
+        }
+
+        if (!utils.is.string(quality)) {
+            quality = this.config.quality.selected;
+        }
+
+        if (!this.options.quality.includes(quality)) {
+            this.debug.warn(`Unsupported quality option (${quality})`);
             return;
         }
 
-        // Set media speed
-        switch (this.type) {
-            case 'youtube':
-                this.utils.dispatchEvent.call(this, this.media, 'qualityrequested', false, {
-                    quality,
-                });
+        // Update config
+        this.config.quality.selected = quality;
 
-                this.embed.setPlaybackQuality(quality);
-
-                break;
-
-            default:
-                this.warn('Quality options are only available for YouTube');
-                break;
-        }
+        // Set quality
+        this.media.quality = quality;
     }
 
+    /**
+     * Get current quality level
+     */
     get quality() {
-        // Set media speed
-        switch (this.type) {
-            case 'youtube':
-                return this.embed.getPlaybackQuality();
-
-            default:
-                this.warn('Quality options are only available for YouTube');
-                return null;
-        }
+        return this.media.quality;
     }
 
-    // Toggle loop
-    // TODO: Finish logic
-    // TODO: Set the indicator on load as user may pass loop as config
-    /* loop(input) {
+    /**
+     * Toggle loop
+     * TODO: Finish fancy new logic. Set the indicator on load as user may pass loop as config
+     * @param {boolean} input - Whether to loop or not
+     */
+    set loop(input) {
+        const toggle = utils.is.boolean(input) ? input : this.config.loop.active;
+        this.config.loop.active = toggle;
+        this.media.loop = toggle;
+
         // Set default to be a true toggle
-        const type = ['start', 'end', 'all', 'none', 'toggle'].includes(input) ? input : 'toggle';
+        /* const type = ['start', 'end', 'all', 'none', 'toggle'].includes(input) ? input : 'toggle';
 
         switch (type) {
             case 'start':
@@ -527,25 +655,38 @@ class Plyr {
                 this.config.loop.start = 0;
                 this.config.loop.end = null;
                 break;
-        }
+        } */
+    }
 
-        // Allow chaining
-        return this;
-    } */
+    /**
+     * Get current loop state
+     */
+    get loop() {
+        return this.media.loop;
+    }
 
-    // Media source
-    set src(input) {
+    /**
+     * Set new media source
+     * @param {object} input - The new source object (see docs)
+     */
+    set source(input) {
         source.change.call(this, input);
     }
 
-    get src() {
+    /**
+     * Get current source
+     */
+    get source() {
         return this.media.currentSrc;
     }
 
-    // Poster image
+    /**
+     * Set the poster image for a HTML5 video
+     * @param {input} - the URL for the new poster image
+     */
     set poster(input) {
-        if (this.type !== 'video') {
-            this.warn('Poster can only be set on HTML5 video');
+        if (!this.isHTML5 || !this.isVideo) {
+            this.debug.warn('Poster can only be set on HTML5 video');
             return;
         }
 
@@ -554,51 +695,79 @@ class Plyr {
         }
     }
 
+    /**
+     * Get the current poster image
+     */
     get poster() {
-        if (this.type !== 'video') {
+        if (!this.isHTML5 || !this.isVideo) {
             return null;
         }
 
         return this.media.getAttribute('poster');
     }
 
-    // Toggle captions
+    /**
+     * Set the autoplay state
+     * @param {boolean} input - Whether to autoplay or not
+     */
+    set autoplay(input) {
+        const toggle = utils.is.boolean(input) ? input : this.config.autoplay;
+        this.config.autoplay = toggle;
+    }
+
+    /**
+     * Get the current autoplay state
+     */
+    get autoplay() {
+        return this.config.autoplay;
+    }
+
+    /**
+     * Toggle captions
+     * @param {boolean} input - Whether to enable captions
+     */
     toggleCaptions(input) {
         // If there's no full support, or there's no caption toggle
-        if (!this.supported.ui || !utils.is.htmlElement(this.elements.buttons.captions)) {
-            return this;
+        if (!this.supported.ui || !utils.is.element(this.elements.buttons.captions)) {
+            return;
         }
 
         // If the method is called without parameter, toggle based on current value
-        const show = utils.is.boolean(input)
-            ? input
-            : this.elements.container.className.indexOf(this.config.classNames.captions.active) === -1;
+        const show = utils.is.boolean(input) ? input : this.elements.container.className.indexOf(this.config.classNames.captions.active) === -1;
 
         // Nothing to change...
-        if (this.captions.enabled === show) {
-            return this;
+        if (this.captions.active === show) {
+            return;
         }
 
         // Set global
-        this.captions.enabled = show;
+        this.captions.active = show;
 
         // Toggle state
-        utils.toggleState(this.elements.buttons.captions, this.captions.enabled);
+        utils.toggleState(this.elements.buttons.captions, this.captions.active);
 
         // Add class hook
-        utils.toggleClass(this.elements.container, this.config.classNames.captions.active, this.captions.enabled);
+        utils.toggleClass(this.elements.container, this.config.classNames.captions.active, this.captions.active);
 
         // Trigger an event
-        utils.dispatchEvent.call(this, this.media, this.captions.enabled ? 'captionsenabled' : 'captionsdisabled');
-
-        // Allow chaining
-        return this;
+        utils.dispatchEvent.call(this, this.media, this.captions.active ? 'captionsenabled' : 'captionsdisabled');
     }
 
-    // Caption language
+    /**
+     * Set the captions language
+     * @param {string} - Two character ISO language code (e.g. EN, FR, PT, etc)
+     */
     set language(input) {
         // Nothing specified
         if (!utils.is.string(input)) {
+            return;
+        }
+
+        // Toggle captions based on input
+        this.toggleCaptions(!utils.is.empty(input));
+
+        // If empty string is passed, assume disable captions
+        if (utils.is.empty(input)) {
             return;
         }
 
@@ -606,63 +775,57 @@ class Plyr {
         const language = input.toLowerCase();
 
         // If nothing to change, bail
-        if (this.captions.language === language) {
+        if (this.language === language) {
             return;
         }
-
-        // Reset UI
-        this.toggleCaptions(true);
 
         // Update config
         this.captions.language = language;
 
-        // Trigger an event
-        utils.dispatchEvent.call(this, this.media, 'captionchange');
-
         // Clear caption
-        captions.set.call(this);
+        captions.setText.call(this, null);
 
-        // Re-run setup
-        captions.setup.call(this);
+        // Update captions
+        captions.setLanguage.call(this);
+
+        // Trigger an event
+        utils.dispatchEvent.call(this, this.media, 'languagechange');
     }
 
+    /**
+     * Get the current captions language
+     */
     get language() {
         return this.captions.language;
     }
 
-    // Toggle fullscreen
-    // Requires user input event
+    /**
+     * Toggle fullscreen playback
+     * Requires user input event
+     * @param {event} event
+     */
     toggleFullscreen(event) {
         // Check for native support
         if (fullscreen.enabled) {
-            // If it's a fullscreen change event, update the UI
             if (utils.is.event(event) && event.type === fullscreen.eventType) {
+                // If it's a fullscreen change event, update the state
                 this.fullscreen.active = fullscreen.isFullScreen(this.elements.container);
             } else {
                 // Else it's a user request to enter or exit
                 if (!this.fullscreen.active) {
-                    // Request full screen
                     fullscreen.requestFullScreen(this.elements.container);
                 } else {
-                    // Bail from fullscreen
                     fullscreen.cancelFullScreen();
                 }
 
-                // Check if we're actually full screen (it could fail)
-                this.fullscreen.active = fullscreen.isFullScreen(this.elements.container);
-
-                return this;
+                return;
             }
         } else {
             // Otherwise, it's a simple toggle
             this.fullscreen.active = !this.fullscreen.active;
 
             // Add class hook
-            utils.toggleClass(
-                this.elements.container,
-                this.config.classNames.fullscreen.fallback,
-                this.fullscreen.active
-            );
+            utils.toggleClass(this.elements.container, this.config.classNames.fullscreen.fallback, this.fullscreen.active);
 
             // Make sure we don't lose scroll position
             if (this.fullscreen.active) {
@@ -679,19 +842,19 @@ class Plyr {
         }
 
         // Set button state
-        if (this.elements.buttons && this.elements.buttons.fullscreen) {
+        if (utils.is.element(this.elements.buttons.fullscreen)) {
             utils.toggleState(this.elements.buttons.fullscreen, this.fullscreen.active);
         }
 
         // Trigger an event
         utils.dispatchEvent.call(this, this.media, this.fullscreen.active ? 'enterfullscreen' : 'exitfullscreen');
-
-        return this;
     }
 
-    // Toggle picture-in-picture
-    // TODO: update player with state, support, enabled
-    // TODO: detect outside changes
+    /**
+     * Toggle picture-in-picture playback on WebKit/MacOS
+     * TODO: update player with state, support, enabled
+     * TODO: detect outside changes
+     */
     set pip(input) {
         const states = {
             pip: 'picture-in-picture',
@@ -710,6 +873,9 @@ class Plyr {
         this.media.webkitSetPresentationMode(toggle ? states.pip : states.inline);
     }
 
+    /**
+     * Get the current picture-in-picture state
+     */
     get pip() {
         if (!support.pip) {
             return null;
@@ -718,20 +884,20 @@ class Plyr {
         return this.media.webkitPresentationMode;
     }
 
-    // Trigger airplay
-    // TODO: update player with state, support, enabled
+    /**
+     * Trigger the airplay dialog
+     * TODO: update player with state, support, enabled
+     */
     airplay() {
-        // Bail if no support
-        if (!support.airplay) {
-            return this;
+        // Show dialog if supported
+        if (support.airplay) {
+            this.media.webkitShowPlaybackTargetPicker();
         }
-
-        // Show dialog
-        this.media.webkitShowPlaybackTargetPicker();
-
-        return this;
     }
 
+    /**
+     * Trigger google cast dialog
+     */
     googleCast() {
         if (!support.cast) {
           return this;
@@ -740,53 +906,64 @@ class Plyr {
         googleCast.requestSession(this);
     }
 
-    // Show the player controls in fullscreen mode
+    /**
+     * Toggle the player controls
+     * @param {boolean} toggle - Whether to show the controls
+     */
     toggleControls(toggle) {
-        const player = this;
-
         // We need controls of course...
-        if (!utils.is.htmlElement(this.elements.controls)) {
-            return player;
+        if (!utils.is.element(this.elements.controls)) {
+            return;
         }
 
-        // Don't hide if config says not to, it's audio, or not ready or loading
-        if (!this.supported.ui || !this.config.hideControls || this.type === 'audio') {
-            return player;
+        // Don't hide if no UI support or it's audio
+        if (!this.supported.ui || this.isAudio) {
+            return;
         }
 
         let delay = 0;
         let show = toggle;
         let isEnterFullscreen = false;
-        const loading = utils.hasClass(this.elements.container, this.config.classNames.loading);
 
-        // Default to false if no boolean
+        // Get toggle state if not set
         if (!utils.is.boolean(toggle)) {
             if (utils.is.event(toggle)) {
                 // Is the enter fullscreen event
                 isEnterFullscreen = toggle.type === 'enterfullscreen';
 
                 // Whether to show controls
-                show = ['mousemove', 'touchstart', 'mouseenter', 'focus'].includes(toggle.type);
+                show = [
+                    'mouseenter',
+                    'mousemove',
+                    'touchstart',
+                    'touchmove',
+                    'focusin',
+                ].includes(toggle.type);
 
                 // Delay hiding on move events
-                if (['mousemove', 'touchmove'].includes(toggle.type)) {
+                if ([
+                    'mousemove',
+                    'touchmove',
+                    'touchend',
+                ].includes(toggle.type)) {
                     delay = 2000;
                 }
 
                 // Delay a little more for keyboard users
-                if (toggle.type === 'focus') {
+                if (toggle.type === 'focusin') {
                     delay = 3000;
+                    utils.toggleClass(this.elements.controls, this.config.classNames.noTransition, true);
                 }
             } else {
                 show = utils.hasClass(this.elements.container, this.config.classNames.hideControls);
             }
         }
 
-        // Clear timer every movement
-        window.clearTimeout(this.timers.hover);
+        // Clear timer on every call
+        window.clearTimeout(this.timers.controls);
 
         // If the mouse is not over the controls, set a timeout to hide them
-        if (show || this.media.paused || loading) {
+        if (show || this.paused || this.loading) {
             // Check if controls toggled
             const toggled = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, false);
 
@@ -796,8 +973,8 @@ class Plyr {
             }
 
             // Always show controls when paused or if touch
-            if (this.media.paused || loading) {
-                return player;
+            if (this.paused || this.loading) {
+                return;
             }
 
             // Delay for hiding on touch
@@ -808,11 +985,24 @@ class Plyr {
 
         // If toggle is false or if we're playing (regardless of toggle),
         // then set the timer to hide the controls
-        if (!show || !this.media.paused) {
-            this.timers.hover = window.setTimeout(() => {
+        if (!show || this.playing) {
+            this.timers.controls = window.setTimeout(() => {
+                /* this.debug.warn({
+                    pressed: this.elements.controls.pressed,
+                    hover: this.elements.controls.pressed,
+                    playing: this.playing,
+                    paused: this.paused,
+                    loading: this.loading,
+                }); */
+
                 // If the mouse is over the controls (and not entering fullscreen), bail
                 if ((this.elements.controls.pressed || this.elements.controls.hover) && !isEnterFullscreen) {
                     return;
+                }
+
+                // Restore transition behaviour
+                if (!utils.hasClass(this.elements.container, this.config.classNames.hideControls)) {
+                    utils.toggleClass(this.elements.controls, this.config.classNames.noTransition, false);
                 }
 
                 // Check if controls toggled
@@ -828,31 +1018,35 @@ class Plyr {
                 }
             }, delay);
         }
-
-        return this;
     }
 
-    // Event listeners
+    /**
+     * Add event listeners
+     * @param {string} event - Event type
+     * @param {function} callback - Callback for when event occurs
+     */
     on(event, callback) {
         utils.on(this.elements.container, event, callback);
-
-        return this;
     }
 
+    /**
+     * Remove event listeners
+     * @param {string} event - Event type
+     * @param {function} callback - Callback for when event occurs
+     */
     off(event, callback) {
         utils.off(this.elements.container, event, callback);
-
-        return this;
     }
 
-    // Check for support
-    supports(type) {
-        return support.mime.call(this, type);
-    }
 
-    // Destroy an instance
-    // Event listeners are removed when elements are removed
-    // http://stackoverflow.com/questions/12528049/if-a-dom-element-is-removed-are-its-listeners-also-removed-from-memory
+
+    /**
+     * Destroy an instance
+     * Event listeners are removed when elements are removed
+     * http://stackoverflow.com/questions/12528049/if-a-dom-element-is-removed-are-its-listeners-also-removed-from-memory
+     * @param {function} callback - Callback for when destroy is complete
+     * @param {boolean} soft - Whether it's a soft destroy (for source changes etc)
+     */
     destroy(callback, soft = false) {
         const done = () => {
             // Reset overflow (incase destroyed while in fullscreen)
@@ -860,17 +1054,27 @@ class Plyr {
 
             // GC for embed
             this.embed = null;
+            this.embedId = null;
 
             // If it's a soft destroy, make minimal changes
             if (soft) {
-                utils.removeElement(this.elements.captions);
-                utils.removeElement(this.elements.controls);
-                utils.removeElement(this.elements.wrapper);
+                if (Object.keys(this.elements).length) {
+                    // Remove buttons
+                    if (this.elements.buttons && this.elements.buttons.play) {
+                        Array.from(this.elements.buttons.play).forEach(button => utils.removeElement(button));
+                    }
 
-                // Clear for GC
-                this.elements.captions = null;
-                this.elements.controls = null;
-                this.elements.wrapper = null;
+                    // Remove others
+                    utils.removeElement(this.elements.captions);
+                    utils.removeElement(this.elements.controls);
+                    utils.removeElement(this.elements.wrapper);
+
+                    // Clear for GC
+                    this.elements.buttons.play = null;
+                    this.elements.captions = null;
+                    this.elements.controls = null;
+                    this.elements.wrapper = null;
+                }
 
                 // Callback
                 if (utils.is.function(callback)) {
@@ -880,7 +1084,7 @@ class Plyr {
                 // Replace the container with the original element provided
                 const parent = this.elements.container.parentNode;
 
-                if (utils.is.htmlElement(parent)) {
+                if (utils.is.element(parent)) {
                     parent.replaceChild(this.elements.original, this.elements.container);
                 }
 
@@ -898,8 +1102,18 @@ class Plyr {
         };
 
         // Type specific stuff
-        switch (this.type) {
-            case 'youtube':
+        switch (`${this.provider}:${this.type}`) {
+            case 'html5:video':
+            case 'html5:audio':
+                // Restore native video controls
+                ui.toggleNativeControls.call(this, true);
+
+                // Clean up
+                done();
+
+                break;
+
+            case 'youtube:video':
                 // Clear timers
                 window.clearInterval(this.timers.buffering);
                 window.clearInterval(this.timers.playing);
@@ -912,7 +1126,7 @@ class Plyr {
 
                 break;
 
-            case 'vimeo':
+            case 'vimeo:video':
                 // Destroy Vimeo API
                 // then clean up (wait, to prevent postmessage errors)
                 this.embed.unload().then(done);
@@ -922,19 +1136,36 @@ class Plyr {
 
                 break;
 
-            case 'video':
-            case 'audio':
-                // Restore native video controls
-                ui.toggleNativeControls.call(this, true);
-
-                // Clean up
-                done();
-
-                break;
-
             default:
                 break;
         }
+    }
+
+    /**
+     * Check for support for a mime type (HTML5 only)
+     * @param {string} type - Mime type
+     */
+    supports(type) {
+        return support.mime.call(this, type);
+    }
+
+    /**
+     * Check for support
+     * @param {string} type - Player type (audio/video)
+     * @param {string} provider - Provider (html5/youtube/vimeo)
+     * @param {bool} inline - Where player has `playsinline` sttribute
+     */
+    static supported(type, provider, inline) {
+        return support.check(type, provider, inline);
+    }
+
+    /**
+     * Load an SVG sprite into the page
+     * @param {string} url - URL for the SVG sprite
+     * @param {string} [id] - Unique ID
+     */
+    static loadSprite(url, id) {
+        return utils.loadSprite(url, id);
     }
 }
 

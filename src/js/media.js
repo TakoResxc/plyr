@@ -8,17 +8,23 @@ import youtube from './plugins/youtube';
 import vimeo from './plugins/vimeo';
 import ui from './ui';
 
+// Sniff out the browser
+const browser = utils.getBrowser();
+
 const media = {
     // Setup media
     setup() {
         // If there's no media, bail
         if (!this.media) {
-            this.warn('No media element found!');
+            this.debug.warn('No media element found!');
             return;
         }
 
         // Add type class
         utils.toggleClass(this.elements.container, this.config.classNames.type.replace('{0}', this.type), true);
+
+        // Add provider class
+        utils.toggleClass(this.elements.container, this.config.classNames.provider.replace('{0}', this.provider), true);
 
         // Add video class for embeds
         // This will require changes if audio embeds are added
@@ -28,31 +34,23 @@ const media = {
 
         if (this.supported.ui) {
             // Check for picture-in-picture support
-            utils.toggleClass(
-                this.elements.container,
-                this.config.classNames.pip.supported,
-                support.pip && this.type === 'video'
-            );
+            utils.toggleClass(this.elements.container, this.config.classNames.pip.supported, support.pip && this.isHTML5 && this.isVideo);
 
             // Check for airplay support
-            utils.toggleClass(
-                this.elements.container,
-                this.config.classNames.airplay.supported,
-                support.airplay && this.isHTML5
-            );
+            utils.toggleClass(this.elements.container, this.config.classNames.airplay.supported, support.airplay && this.isHTML5);
 
             // If there's no autoplay attribute, assume the video is stopped and add state class
             utils.toggleClass(this.elements.container, this.config.classNames.stopped, this.config.autoplay);
 
             // Add iOS class
-            utils.toggleClass(this.elements.container, this.config.classNames.isIos, this.browser.isIos);
+            utils.toggleClass(this.elements.container, this.config.classNames.isIos, browser.isIos);
 
             // Add touch class
             utils.toggleClass(this.elements.container, this.config.classNames.isTouch, support.touch);
         }
 
         // Inject the player wrapper
-        if (['video', 'youtube', 'vimeo'].includes(this.type)) {
+        if (this.isVideo || this.isYouTube || this.isVimeo) {
             // Create the wrapper div
             this.elements.wrapper = utils.createElement('div', {
                 class: this.config.classNames.video,
@@ -62,9 +60,8 @@ const media = {
             utils.wrap(this.media, this.elements.wrapper);
         }
 
-        // Embeds
         if (this.isEmbed) {
-            switch (this.type) {
+            switch (this.provider) {
                 case 'youtube':
                     youtube.setup.call(this);
                     break;
@@ -76,9 +73,9 @@ const media = {
                 default:
                     break;
             }
+        } else if (this.isHTML5) {
+            ui.setTitle.call(this);
         }
-
-        ui.setTitle.call(this);
     },
 
     // Cancel current network requests
@@ -102,7 +99,7 @@ const media = {
         this.media.load();
 
         // Debugging
-        this.log('Cancelled network requests');
+        this.debug.log('Cancelled network requests');
     },
 };
 

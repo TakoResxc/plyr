@@ -5,12 +5,16 @@
 import support from './support';
 import utils from './utils';
 import ui from './ui';
+import captions from './captions';
+
+// Sniff out the browser
+const browser = utils.getBrowser();
 
 const controls = {
     // Webkit polyfill for lower fill range
     updateRangeFill(target) {
         // WebKit only
-        if (!this.browser.isWebkit) {
+        if (!browser.isWebkit) {
             return;
         }
 
@@ -18,12 +22,12 @@ const controls = {
         const range = utils.is.event(target) ? target.target : target;
 
         // Needs to be a valid <input type='range'>
-        if (!utils.is.htmlElement(range) || range.getAttribute('type') !== 'range') {
+        if (!utils.is.element(range) || range.getAttribute('type') !== 'range') {
             return;
         }
 
         // Inject the stylesheet if needed
-        if (!utils.is.htmlElement(this.elements.styleSheet)) {
+        if (!utils.is.element(this.elements.styleSheet)) {
             this.elements.styleSheet = utils.createElement('style');
             this.elements.container.appendChild(this.elements.styleSheet);
         }
@@ -42,14 +46,17 @@ const controls = {
         }
 
         // Insert new one
-        styleSheet.insertRule([selector, styles].join(' '));
+        styleSheet.insertRule([
+            selector,
+            styles,
+        ].join(' '));
     },
 
     // Get icon URL
     getIconUrl() {
         return {
             url: this.config.iconUrl,
-            absolute: this.config.iconUrl.indexOf('http') === 0 || (this.browser.isIE && !window.svg4everybody),
+            absolute: this.config.iconUrl.indexOf('http') === 0 || (browser.isIE && !window.svg4everybody),
         };
     },
 
@@ -70,7 +77,16 @@ const controls = {
 
         // Create the <use> to reference sprite
         const use = document.createElementNS(namespace, 'use');
-        use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `${iconPath}-${type}`);
+        const path = `${iconPath}-${type}`;
+
+        // Set `href` attributes
+        // https://github.com/sampotts/plyr/issues/460
+        // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
+        if ('href' in use) {
+            use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', path);
+        } else {
+            use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', path);
+        }
 
         // Add <use> to <svg>
         icon.appendChild(use);
@@ -79,8 +95,9 @@ const controls = {
     },
 
     // Create hidden text label
-    createLabel(type) {
+    createLabel(type, attr) {
         let text = this.config.i18n[type];
+        const attributes = Object.assign({}, attr);
 
         switch (type) {
             case 'pip':
@@ -95,17 +112,21 @@ const controls = {
                 break;
         }
 
-        return utils.createElement(
-            'span',
-            {
-                class: this.config.classNames.hidden,
-            },
-            text
-        );
+        if ('class' in attributes) {
+            attributes.class += ` ${this.config.classNames.hidden}`;
+        } else {
+            attributes.class = this.config.classNames.hidden;
+        }
+
+        return utils.createElement('span', attributes, text);
     },
 
     // Create a badge
     createBadge(text) {
+        if (utils.is.empty(text)) {
+            return null;
+        }
+
         const badge = utils.createElement('span', {
             class: this.config.classNames.menu.value,
         });
@@ -128,16 +149,19 @@ const controls = {
         const button = utils.createElement('button');
         const attributes = Object.assign({}, attr);
         let type = buttonType;
-        let iconDefault;
-        let iconToggled;
-        let labelKey;
+
+        let toggle = false;
+        let label;
+        let icon;
+        let labelPressed;
+        let iconPressed;
 
         if (!('type' in attributes)) {
             attributes.type = 'button';
         }
 
         if ('class' in attributes) {
-            if (attributes.class.indexOf(this.config.classNames.control) === -1) {
+            if (attributes.class.includes(this.config.classNames.control)) {
                 attributes.class += ` ${this.config.classNames.control}`;
             }
         } else {
@@ -146,29 +170,43 @@ const controls = {
 
         // Large play button
         switch (type) {
+            case 'play':
+                toggle = true;
+                label = 'play';
+                labelPressed = 'pause';
+                icon = 'play';
+                iconPressed = 'pause';
+                break;
+
             case 'mute':
-                labelKey = 'toggleMute';
-                iconDefault = 'volume';
-                iconToggled = 'muted';
+                toggle = true;
+                label = 'mute';
+                labelPressed = 'unmute';
+                icon = 'volume';
+                iconPressed = 'muted';
                 break;
 
             case 'captions':
-                labelKey = 'toggleCaptions';
-                iconDefault = 'captions-off';
-                iconToggled = 'captions-on';
+                toggle = true;
+                label = 'enableCaptions';
+                labelPressed = 'disableCaptions';
+                icon = 'captions-off';
+                iconPressed = 'captions-on';
                 break;
 
             case 'fullscreen':
-                labelKey = 'toggleFullscreen';
-                iconDefault = 'enter-fullscreen';
-                iconToggled = 'exit-fullscreen';
+                toggle = true;
+                label = 'enterFullscreen';
+                labelPressed = 'exitFullscreen';
+                icon = 'enter-fullscreen';
+                iconPressed = 'exit-fullscreen';
                 break;
 
             case 'play-large':
-                attributes.class = 'plyr__play-large';
+                attributes.class += ` ${this.config.classNames.control}--overlaid`;
                 type = 'play';
-                labelKey = 'play';
-                iconDefault = 'play';
+                label = 'play';
+                icon = 'play';
                 break;
             case 'cast':
                 labelKey = 'toggleCast';
@@ -176,24 +214,30 @@ const controls = {
                 iconToggled = 'cast-on';
                 break;
             default:
-                labelKey = type;
-                iconDefault = type;
+                label = type;
+                icon = type;
+        }
+
+        // Setup toggle icon and labels
+        if (toggle) {
+            // Icon
+            button.appendChild(controls.createIcon.call(this, iconPressed, { class: 'icon--pressed' }));
+            button.appendChild(controls.createIcon.call(this, icon, { class: 'icon--not-pressed' }));
+
+            // Label/Tooltip
+            button.appendChild(controls.createLabel.call(this, labelPressed, { class: 'label--pressed' }));
+            button.appendChild(controls.createLabel.call(this, label, { class: 'label--not-pressed' }));
+
+            // Add aria attributes
+            attributes['aria-pressed'] = false;
+            attributes['aria-label'] = this.config.i18n[label];
+        } else {
+            button.appendChild(controls.createIcon.call(this, icon));
+            button.appendChild(controls.createLabel.call(this, label));
         }
 
         // Merge attributes
         utils.extend(attributes, utils.getAttributesFromSelector(this.config.selectors.buttons[type], attributes));
-
-        // Add toggle icon if needed
-        if (utils.is.string(iconToggled)) {
-            button.appendChild(
-                controls.createIcon.call(this, iconToggled, {
-                    class: `icon--${iconToggled}`,
-                })
-            );
-        }
-
-        button.appendChild(controls.createIcon.call(this, iconDefault));
-        button.appendChild(controls.createLabel.call(this, labelKey));
 
         utils.setAttributes(button, attributes);
 
@@ -285,7 +329,7 @@ const controls = {
 
     // Create time display
     createTime(type) {
-        const container = utils.createElement('span', {
+        const container = utils.createElement('div', {
             class: 'plyr__time',
         });
 
@@ -299,13 +343,44 @@ const controls = {
             )
         );
 
-        container.appendChild(
-            utils.createElement('span', utils.getAttributesFromSelector(this.config.selectors.display[type]), '00:00')
-        );
+        container.appendChild(utils.createElement('span', utils.getAttributesFromSelector(this.config.selectors.display[type]), '00:00'));
 
         this.elements.display[type] = container;
 
         return container;
+    },
+
+    // Create a settings menu item
+    createMenuItem(value, list, type, title, badge = null, checked = false) {
+        const item = utils.createElement('li');
+
+        const label = utils.createElement('label', {
+            class: this.config.classNames.control,
+        });
+
+        const radio = utils.createElement(
+            'input',
+            utils.extend(utils.getAttributesFromSelector(this.config.selectors.inputs[type]), {
+                type: 'radio',
+                name: `plyr-${type}`,
+                value,
+                checked,
+                class: 'plyr__sr-only',
+            })
+        );
+
+        const faux = utils.createElement('span', { 'aria-hidden': true });
+
+        label.appendChild(radio);
+        label.appendChild(faux);
+        label.insertAdjacentHTML('beforeend', title);
+
+        if (utils.is.element(badge)) {
+            label.appendChild(badge);
+        }
+
+        item.appendChild(label);
+        list.appendChild(item);
     },
 
     // Update hover tooltip for seeking
@@ -313,8 +388,8 @@ const controls = {
         // Bail if setting not true
         if (
             !this.config.tooltips.seek ||
-            !utils.is.htmlElement(this.elements.inputs.seek) ||
-            !utils.is.htmlElement(this.elements.display.seekTooltip) ||
+            !utils.is.element(this.elements.inputs.seek) ||
+            !utils.is.element(this.elements.display.seekTooltip) ||
             this.duration === 0
         ) {
             return;
@@ -329,7 +404,7 @@ const controls = {
         if (utils.is.event(event)) {
             percent = 100 / clientRect.width * (event.pageX - clientRect.left);
         } else if (utils.hasClass(this.elements.display.seekTooltip, visible)) {
-            percent = this.elements.display.seekTooltip.style.left.replace('%', '');
+            percent = parseFloat(this.elements.display.seekTooltip.style.left, 10);
         } else {
             return;
         }
@@ -342,14 +417,17 @@ const controls = {
         }
 
         // Display the time a click would seek to
-        ui.updateTimeDisplay.call(this, this.duration / 100 * percent, this.elements.display.seekTooltip);
+        ui.updateTimeDisplay.call(this, this.elements.display.seekTooltip, this.duration / 100 * percent);
 
         // Set position
         this.elements.display.seekTooltip.style.left = `${percent}%`;
 
         // Show/hide the tooltip
         // If the event is a moues in/out and percentage is inside bounds
-        if (utils.is.event(event) && ['mouseenter', 'mouseleave'].includes(event.type)) {
+        if (utils.is.event(event) && [
+            'mouseenter',
+            'mouseleave',
+        ].includes(event.type)) {
             utils.toggleClass(this.elements.display.seekTooltip, visible, event.type === 'mouseenter');
         }
     },
@@ -359,26 +437,14 @@ const controls = {
         const tab = this.elements.settings.tabs[setting];
         const pane = this.elements.settings.panes[setting];
 
-        if (utils.is.htmlElement(tab)) {
-            if (toggle) {
-                tab.removeAttribute('hidden');
-            } else {
-                tab.setAttribute('hidden', '');
-            }
-        }
-
-        if (utils.is.htmlElement(pane)) {
-            if (toggle) {
-                pane.removeAttribute('hidden');
-            } else {
-                pane.setAttribute('hidden', '');
-            }
-        }
+        utils.toggleHidden(tab, !toggle);
+        utils.toggleHidden(pane, !toggle);
     },
 
     // Set the YouTube quality menu
     // TODO: Support for HTML5
     setQualityMenu(options) {
+        const type = 'quality';
         const list = this.elements.settings.panes.quality.querySelector('ul');
 
         // Set options if passed and filter based on config
@@ -389,8 +455,8 @@ const controls = {
         }
 
         // Toggle the pane and tab
-        const toggle = !utils.is.empty(this.options.quality) && this.type === 'youtube';
-        controls.toggleTab.call(this, 'quality', toggle);
+        const toggle = !utils.is.empty(this.options.quality) && this.isYouTube;
+        controls.toggleTab.call(this, type, toggle);
 
         // If we're hiding, nothing more to do
         if (!toggle) {
@@ -432,35 +498,11 @@ const controls = {
             return controls.createBadge.call(this, label);
         };
 
-        this.options.quality.forEach(quality => {
-            const item = utils.createElement('li');
+        this.options.quality.forEach(quality =>
+            controls.createMenuItem.call(this, quality, list, type, controls.getLabel.call(this, 'quality', quality), getBadge(quality))
+        );
 
-            const label = utils.createElement('label', {
-                class: this.config.classNames.control,
-            });
-
-            const radio = utils.createElement(
-                'input',
-                utils.extend(utils.getAttributesFromSelector(this.config.selectors.inputs.quality), {
-                    type: 'radio',
-                    name: 'plyr-quality',
-                    value: quality,
-                })
-            );
-
-            label.appendChild(radio);
-            label.appendChild(document.createTextNode(controls.getLabel.call(this, 'quality', quality)));
-
-            const badge = getBadge(quality);
-            if (utils.is.htmlElement(badge)) {
-                label.appendChild(badge);
-            }
-
-            item.appendChild(label);
-            list.appendChild(item);
-        });
-
-        controls.updateSetting.call(this, 'quality', list);
+        controls.updateSetting.call(this, type, list);
     },
 
     // Translate a value into a nice label
@@ -510,12 +552,7 @@ const controls = {
 
         switch (setting) {
             case 'captions':
-                value = this.captions.language;
-
-                if (!this.captions.enabled) {
-                    value = '';
-                }
-
+                value = this.captions.active ? this.captions.language : '';
                 break;
 
             default:
@@ -528,13 +565,13 @@ const controls = {
 
                 // Unsupported value
                 if (!this.options[setting].includes(value)) {
-                    this.warn(`Unsupported value of '${value}' for ${setting}`);
+                    this.debug.warn(`Unsupported value of '${value}' for ${setting}`);
                     return;
                 }
 
                 // Disabled value
                 if (!this.config[setting].options.includes(value)) {
-                    this.warn(`Disabled value of '${value}' for ${setting}`);
+                    this.debug.warn(`Disabled value of '${value}' for ${setting}`);
                     return;
                 }
 
@@ -542,33 +579,33 @@ const controls = {
         }
 
         // Get the list if we need to
-        if (!utils.is.htmlElement(list)) {
+        if (!utils.is.element(list)) {
             list = pane && pane.querySelector('ul');
+        }
+
+        // Update the label
+        if (!utils.is.empty(value)) {
+            const label = this.elements.settings.tabs[setting].querySelector(`.${this.config.classNames.menu.value}`);
+            label.innerHTML = controls.getLabel.call(this, setting, value);
         }
 
         // Find the radio option
         const target = list && list.querySelector(`input[value="${value}"]`);
 
-        if (!utils.is.htmlElement(target)) {
-            return;
+        if (utils.is.element(target)) {
+            // Check it
+            target.checked = true;
         }
-
-        // Check it
-        target.checked = true;
-
-        // Find the label
-        const label = this.elements.settings.tabs[setting].querySelector(`.${this.config.classNames.menu.value}`);
-        label.innerHTML = controls.getLabel.call(this, setting, value);
     },
 
     // Set the looping options
-    setLoopMenu() {
+    /* setLoopMenu() {
         const options = ['start', 'end', 'all', 'reset'];
         const list = this.elements.settings.panes.loop.querySelector('ul');
 
         // Show the pane and tab
-        this.elements.settings.tabs.loop.removeAttribute('hidden');
-        this.elements.settings.panes.loop.removeAttribute('hidden');
+        utils.toggleHidden(this.elements.settings.tabs.loop, false);
+        utils.toggleHidden(this.elements.settings.panes.loop, false);
 
         // Toggle the pane and tab
         const toggle = !utils.is.empty(this.loop.options);
@@ -598,7 +635,7 @@ const controls = {
             item.appendChild(button);
             list.appendChild(item);
         });
-    },
+    }, */
 
     // Get current selected caption language
     // TODO: rework this to user the getter in the API?
@@ -607,12 +644,16 @@ const controls = {
             return null;
         }
 
-        if (!support.textTracks || utils.is.empty(this.captions.tracks)) {
+        if (!support.textTracks || !captions.getTracks.call(this).length) {
             return this.config.i18n.none;
         }
 
-        if (this.captions.enabled) {
-            return this.captions.currentTrack.label;
+        if (this.captions.active) {
+            const currentTrack = captions.getCurrentTrack.call(this);
+
+            if (utils.is.track(currentTrack)) {
+                return currentTrack.label;
+            }
         }
 
         return this.config.i18n.disabled;
@@ -620,24 +661,25 @@ const controls = {
 
     // Set a list of available captions languages
     setCaptionsMenu() {
+        // TODO: Captions or language? Currently it's mixed
+        const type = 'captions';
         const list = this.elements.settings.panes.captions.querySelector('ul');
 
         // Toggle the pane and tab
-        const toggle = !utils.is.empty(this.captions.tracks);
-        controls.toggleTab.call(this, 'captions', toggle);
+        const hasTracks = captions.getTracks.call(this).length;
+        controls.toggleTab.call(this, type, hasTracks);
 
         // Empty the menu
         utils.emptyElement(list);
 
         // If there's no captions, bail
-        if (utils.is.empty(this.captions.tracks)) {
+        if (!hasTracks) {
             return;
         }
 
         // Re-map the tracks into just the data we need
-        const tracks = Array.from(this.captions.tracks).map(track => ({
+        const tracks = captions.getTracks.call(this).map(track => ({
             language: track.language,
-            badge: true,
             label: !utils.is.empty(track.label) ? track.label : track.language.toUpperCase(),
         }));
 
@@ -649,51 +691,43 @@ const controls = {
 
         // Generate options
         tracks.forEach(track => {
-            const item = utils.createElement('li');
-
-            const label = utils.createElement('label', {
-                class: this.config.classNames.control,
-            });
-
-            const radio = utils.createElement(
-                'input',
-                utils.extend(utils.getAttributesFromSelector(this.config.selectors.inputs.language), {
-                    type: 'radio',
-                    name: 'plyr-language',
-                    value: track.language,
-                })
+            controls.createMenuItem.call(
+                this,
+                track.language,
+                list,
+                'language',
+                track.label || track.language,
+                controls.createBadge.call(this, track.language.toUpperCase()),
+                track.language.toLowerCase() === this.captions.language.toLowerCase()
             );
-
-            if (track.language.toLowerCase() === this.captions.language.toLowerCase()) {
-                radio.checked = true;
-            }
-
-            label.appendChild(radio);
-            label.appendChild(document.createTextNode(track.label || track.language));
-
-            if (track.badge) {
-                label.appendChild(controls.createBadge.call(this, track.language.toUpperCase()));
-            }
-
-            item.appendChild(label);
-            list.appendChild(item);
         });
 
-        controls.updateSetting.call(this, 'captions', list);
+        controls.updateSetting.call(this, type, list);
     },
 
     // Set a list of available captions languages
-    setSpeedMenu(options) {
-        // Set options if passed and filter based on config
-        if (utils.is.array(options)) {
-            this.options.speed = options.filter(speed => this.config.speed.options.includes(speed));
-        } else {
-            this.options.speed = this.config.speed.options;
+    setSpeedMenu() {
+        const type = 'speed';
+
+        // Set the default speeds
+        if (!utils.is.object(this.options.speed) || !Object.keys(this.options.speed).length) {
+            this.options.speed = [
+                0.5,
+                0.75,
+                1,
+                1.25,
+                1.5,
+                1.75,
+                2,
+            ];
         }
+
+        // Set options if passed and filter based on config
+        this.options.speed = this.options.speed.filter(speed => this.config.speed.options.includes(speed));
 
         // Toggle the pane and tab
         const toggle = !utils.is.empty(this.options.speed);
-        controls.toggleTab.call(this, 'speed', toggle);
+        controls.toggleTab.call(this, type, toggle);
 
         // If we're hiding, nothing more to do
         if (!toggle) {
@@ -704,46 +738,26 @@ const controls = {
         const list = this.elements.settings.panes.speed.querySelector('ul');
 
         // Show the pane and tab
-        this.elements.settings.tabs.speed.removeAttribute('hidden');
-        this.elements.settings.panes.speed.removeAttribute('hidden');
+        utils.toggleHidden(this.elements.settings.tabs.speed, false);
+        utils.toggleHidden(this.elements.settings.panes.speed, false);
 
         // Empty the menu
         utils.emptyElement(list);
 
         // Create items
-        this.options.speed.forEach(speed => {
-            const item = utils.createElement('li');
+        this.options.speed.forEach(speed => controls.createMenuItem.call(this, speed, list, type, controls.getLabel.call(this, 'speed', speed)));
 
-            const label = utils.createElement('label', {
-                class: this.config.classNames.control,
-            });
-
-            const radio = utils.createElement(
-                'input',
-                utils.extend(utils.getAttributesFromSelector(this.config.selectors.inputs.speed), {
-                    type: 'radio',
-                    name: 'plyr-speed',
-                    value: speed,
-                })
-            );
-
-            label.appendChild(radio);
-            label.insertAdjacentHTML('beforeend', controls.getLabel.call(this, 'speed', speed));
-            item.appendChild(label);
-            list.appendChild(item);
-        });
-
-        controls.updateSetting.call(this, 'speed', list);
+        controls.updateSetting.call(this, type, list);
     },
 
     // Show/hide menu
     toggleMenu(event) {
         const { form } = this.elements.settings;
         const button = this.elements.buttons.settings;
-        const show = utils.is.boolean(event) ? event : form && form.getAttribute('aria-hidden') === 'true';
+        const show = utils.is.boolean(event) ? event : utils.is.element(form) && form.getAttribute('aria-hidden') === 'true';
 
         if (utils.is.event(event)) {
-            const isMenuItem = form && form.contains(event.target);
+            const isMenuItem = utils.is.element(form) && form.contains(event.target);
             const isButton = event.target === this.elements.buttons.settings;
 
             // If the click was inside the form or if the click
@@ -760,11 +774,13 @@ const controls = {
         }
 
         // Set form and button attributes
-        if (button) {
+        if (utils.is.element(button)) {
             button.setAttribute('aria-expanded', show);
         }
-        if (form) {
+
+        if (utils.is.element(form)) {
             form.setAttribute('aria-hidden', !show);
+            utils.toggleClass(this.elements.container, this.config.classNames.menu.open, show);
 
             if (show) {
                 form.removeAttribute('tabindex');
@@ -811,7 +827,7 @@ const controls = {
         const pane = document.getElementById(tab.getAttribute('aria-controls'));
 
         // Nothing to show, bail
-        if (!utils.is.htmlElement(pane)) {
+        if (!utils.is.element(pane)) {
             return;
         }
 
@@ -843,7 +859,10 @@ const controls = {
             // Restore auto height/width
             const restore = e => {
                 // We're only bothered about height and width on the container
-                if (e.target !== container || !['width', 'height'].includes(e.propertyName)) {
+                if (e.target !== container || ![
+                    'width',
+                    'height',
+                ].includes(e.propertyName)) {
                     return;
                 }
 
@@ -871,6 +890,9 @@ const controls = {
         pane.setAttribute('aria-hidden', !show);
         tab.setAttribute('aria-expanded', show);
         pane.removeAttribute('tabindex');
+
+        // Focus the first item
+        pane.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex]')[0].focus();
     },
 
     // Build the default HTML
@@ -882,10 +904,7 @@ const controls = {
         }
 
         // Create the container
-        const container = utils.createElement(
-            'div',
-            utils.getAttributesFromSelector(this.config.selectors.controls.wrapper)
-        );
+        const container = utils.createElement('div', utils.getAttributesFromSelector(this.config.selectors.controls.wrapper));
 
         // Restart button
         if (this.config.controls.includes('restart')) {
@@ -897,10 +916,10 @@ const controls = {
             container.appendChild(controls.createButton.call(this, 'rewind'));
         }
 
-        // Play Pause button
+        // Play/Pause button
         if (this.config.controls.includes('play')) {
             container.appendChild(controls.createButton.call(this, 'play'));
-            container.appendChild(controls.createButton.call(this, 'pause'));
+            // container.appendChild(controls.createButton.call(this, 'pause'));
         }
 
         // Fast forward button
@@ -910,10 +929,7 @@ const controls = {
 
         // Progress
         if (this.config.controls.includes('progress')) {
-            const progress = utils.createElement(
-                'span',
-                utils.getAttributesFromSelector(this.config.selectors.progress)
-            );
+            const progress = utils.createElement('div', utils.getAttributesFromSelector(this.config.selectors.progress));
 
             // Seek range slider
             const seek = controls.createRange.call(this, 'seek', {
@@ -963,7 +979,7 @@ const controls = {
 
         // Volume range control
         if (this.config.controls.includes('volume')) {
-            const volume = utils.createElement('span', {
+            const volume = utils.createElement('div', {
                 class: 'plyr__volume',
             });
 
@@ -984,6 +1000,8 @@ const controls = {
             );
             volume.appendChild(range.label);
             volume.appendChild(range.input);
+
+            this.elements.volume = volume;
 
             container.appendChild(volume);
         }
@@ -1131,8 +1149,7 @@ const controls = {
 
         // Larger overlaid play button
         if (this.config.controls.includes('play-large')) {
-            this.elements.buttons.playLarge = controls.createButton.call(this, 'play-large');
-            this.elements.container.appendChild(this.elements.buttons.playLarge);
+            this.elements.container.appendChild(controls.createButton.call(this, 'play-large'));
         }
 
         this.elements.controls = container;
@@ -1148,14 +1165,11 @@ const controls = {
     inject() {
         // Sprite
         if (this.config.loadSprite) {
-            const iconUrl = controls.getIconUrl.call(this);
+            const icon = controls.getIconUrl.call(this);
 
             // Only load external sprite using AJAX
-            if (iconUrl.absolute) {
-                this.log(`AJAX loading absolute SVG sprite ${this.browser.isIE ? '(due to IE)' : ''}`);
-                utils.loadSprite(iconUrl.url, 'sprite-plyr');
-            } else {
-                this.log('Sprite will be used as external resource directly');
+            if (icon.absolute) {
+                utils.loadSprite(icon.url, 'sprite-plyr');
             }
         }
 
@@ -1198,20 +1212,25 @@ const controls = {
         }
 
         // Inject into the container by default
-        if (!utils.is.htmlElement(target)) {
+        if (!utils.is.element(target)) {
             target = this.elements.container;
         }
 
         // Inject controls HTML
-        if (utils.is.htmlElement(container)) {
+        if (utils.is.element(container)) {
             target.appendChild(container);
         } else {
             target.insertAdjacentHTML('beforeend', container);
         }
 
         // Find the elements if need be
-        if (utils.is.htmlElement(this.elements.controls)) {
+        if (utils.is.element(this.elements.controls)) {
             utils.findElements.call(this);
+        }
+
+        // Edge sometimes doesn't finish the paint so force a redraw
+        if (window.navigator.userAgent.includes('Edge')) {
+            utils.repaint(target);
         }
 
         // Setup tooltips
@@ -1230,6 +1249,7 @@ const controls = {
             Array.from(labels).forEach(label => {
                 utils.toggleClass(label, this.config.classNames.hidden, false);
                 utils.toggleClass(label, this.config.classNames.tooltip, true);
+                label.setAttribute('role', 'tooltip');
             });
         }
     },
