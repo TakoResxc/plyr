@@ -1,6 +1,6 @@
-﻿// ==========================================================================
+// ==========================================================================
 // Plyr
-// plyr.js v3.0.0
+// plyr.js v3.0.0-beta.2
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
@@ -37,7 +37,11 @@ let scrollPosition = {
 class Plyr {
     constructor(target, options) {
         this.timers = {};
+
+        // State
         this.ready = false;
+        this.loading = false;
+        this.failed = false;
 
         // Set the media element
         this.media = target;
@@ -64,7 +68,7 @@ class Plyr {
                 } catch (e) {
                     return {};
                 }
-            })()
+            })(),
         );
 
         // Elements cache
@@ -101,7 +105,7 @@ class Plyr {
 
         // Debugging
         // TODO: move to globals
-        this.debug = new Console(this);
+        this.debug = new Console(this.config.debug);
 
         // Log config options and support
         this.debug.log('Config', this.config);
@@ -139,35 +143,61 @@ class Plyr {
         // Supported: video, audio, vimeo, youtube
         const type = this.media.tagName.toLowerCase();
 
-        // Embed attributes
-        const attributes = {
-            provider: 'data-plyr-provider',
-            id: 'data-plyr-embed-id',
-        };
+        // Embed properties
+        let iframe = null;
+        let url = null;
+        let params = null;
 
         // Different setup based on type
         switch (type) {
-            // TODO: Handle passing an iframe for true progressive enhancement
-            // case 'iframe':
             case 'div':
-                this.type = types.video; // Audio will come later for external providers
-                this.provider = this.media.getAttribute(attributes.provider);
-                this.embedId = this.media.getAttribute(attributes.id);
+                // Find the frame
+                iframe = this.media.querySelector('iframe');
 
+                // <iframe> required
+                if (!utils.is.element(iframe)) {
+                    this.debug.error('Setup failed: <iframe> is missing');
+                    return;
+                }
+
+                // Audio will come later for external providers
+                this.type = types.video;
+
+                // Detect provider
+                url = iframe.getAttribute('src');
+                this.provider = utils.getProviderByUrl(url);
+
+                // Get attributes from URL and set config
+                params = utils.getUrlParams(url);
+                if (!utils.is.empty(params)) {
+                    const truthy = [
+                        '1',
+                        'true',
+                    ];
+
+                    if (truthy.includes(params.autoplay)) {
+                        this.config.autoplay = true;
+                    }
+                    if (truthy.includes(params.playsinline)) {
+                        this.config.inline = true;
+                    }
+                    if (truthy.includes(params.loop)) {
+                        this.config.loop.active = true;
+                    }
+                }
+
+                // Unsupported provider
                 if (utils.is.empty(this.provider) || !Object.keys(providers).includes(this.provider)) {
                     this.debug.error('Setup failed: Invalid provider');
                     return;
                 }
 
-                // Try and get the embed id
-                if (utils.is.empty(this.embedId)) {
-                    this.debug.error('Setup failed: Embed ID or URL missing');
-                    return;
-                }
+                // Rework elements
+                this.elements.container = this.media;
+                this.media = iframe;
 
-                // Clean up
-                this.media.removeAttribute(attributes.provider);
-                this.media.removeAttribute(attributes.id);
+                // Reset classname
+                this.elements.container.className = '';
 
                 break;
 
@@ -176,22 +206,19 @@ class Plyr {
                 this.type = type;
                 this.provider = providers.html5;
 
+                // Get config from attributes
                 if (this.media.hasAttribute('crossorigin')) {
                     this.config.crossorigin = true;
                 }
-
                 if (this.media.hasAttribute('autoplay')) {
                     this.config.autoplay = true;
                 }
-
                 if (this.media.hasAttribute('playsinline')) {
                     this.config.inline = true;
                 }
-
                 if (this.media.hasAttribute('muted')) {
                     this.config.muted = true;
                 }
-
                 if (this.media.hasAttribute('loop')) {
                     this.config.loop.active = true;
                 }
@@ -219,8 +246,10 @@ class Plyr {
         this.media.plyr = this;
 
         // Wrap media
-        this.elements.container = utils.createElement('div');
-        utils.wrap(this.media, this.elements.container);
+        if (!utils.is.element(this.elements.container)) {
+            this.elements.container = utils.createElement('div');
+            utils.wrap(this.media, this.elements.container);
+        }
 
         // Allow focus to be captured
         this.elements.container.setAttribute('tabindex', 0);
@@ -285,7 +314,11 @@ class Plyr {
      * Pause the media
      */
     pause() {
-        return this.media.pause();
+        if (!this.playing) {
+            return;
+        }
+
+        this.media.pause();
     }
 
     /**
@@ -311,11 +344,13 @@ class Plyr {
 
     /**
      * Toggle playback based on current status
-     * @param {boolean} toggle
+     * @param {boolean} input
      */
-    togglePlay(toggle) {
-        // True toggle if nothing passed
-        if ((!utils.is.boolean(toggle) && this.media.paused) || toggle) {
+    togglePlay(input) {
+        // Toggle based on current state if nothing passed
+        const toggle = utils.is.boolean(input) ? input : !this.playing;
+
+        if (toggle) {
             this.play();
         } else {
             this.pause();
@@ -805,6 +840,11 @@ class Plyr {
      * @param {event} event
      */
     toggleFullscreen(event) {
+        // Video only
+        if (this.isAudio) {
+            return;
+        }
+
         // Check for native support
         if (fullscreen.enabled) {
             if (utils.is.event(event) && event.type === fullscreen.eventType) {
@@ -1038,8 +1078,6 @@ class Plyr {
         utils.off(this.elements.container, event, callback);
     }
 
-
-
     /**
      * Destroy an instance
      * Event listeners are removed when elements are removed
@@ -1054,7 +1092,6 @@ class Plyr {
 
             // GC for embed
             this.embed = null;
-            this.embedId = null;
 
             // If it's a soft destroy, make minimal changes
             if (soft) {
@@ -1082,11 +1119,7 @@ class Plyr {
                 }
             } else {
                 // Replace the container with the original element provided
-                const parent = this.elements.container.parentNode;
-
-                if (utils.is.element(parent)) {
-                    parent.replaceChild(this.elements.original, this.elements.container);
-                }
+                utils.replaceElement(this.elements.original, this.elements.container);
 
                 // Event
                 utils.dispatchEvent.call(this, this.elements.original, 'destroyed', true);
@@ -1119,7 +1152,9 @@ class Plyr {
                 window.clearInterval(this.timers.playing);
 
                 // Destroy YouTube API
-                this.embed.destroy();
+                if (this.embed !== null) {
+                    this.embed.destroy();
+                }
 
                 // Clean up
                 done();
@@ -1129,7 +1164,9 @@ class Plyr {
             case 'vimeo:video':
                 // Destroy Vimeo API
                 // then clean up (wait, to prevent postmessage errors)
-                this.embed.unload().then(done);
+                if (this.embed !== null) {
+                    this.embed.unload().then(done);
+                }
 
                 // Vimeo does not always return
                 window.setTimeout(done, 200);

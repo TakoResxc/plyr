@@ -91,21 +91,23 @@ Plyr extends upon the standard HTML5 markup so that's all you need for those typ
 </audio>
 ```
 
-For YouTube and Vimeo, Plyr uses the standard YouTube API markup (an empty `<div>`):
+For YouTube and Vimeo players, Plyr uses progressive enhancement to enhance the default `<iframe>` embeds. Below are some examples. The `plyr__video-embed` classname will make the embed responsive. You can add the `autoplay`, `loop` and `playsinline` (YouTube only) query parameters to the URL and they will be set as config options automatically. For YouTube, the `origin` should be updated to reflect the domain you're hosting the embed on, or you can opt to omit it.
 
 #### YouTube embed
 
 ```html
-<div id="player" data-plyr-provider="youtube" data-plyr-embed-id="bTqVqk7FSmY"></div>
+<div class="plyr__video-embed" id="player">
+    <iframe src="https://www.youtube.com/embed/bTqVqk7FSmY?origin=https://plyr.io&amp;iv_load_policy=3&amp;modestbranding=1&amp;playsinline=1&amp;showinfo=0&amp;rel=0&amp;enablejsapi=1" allowfullscreen allowtransparency allow="autoplay"></iframe>
+</div>
 ```
 
 #### Vimeo embed
 
 ```html
-<div id="player" data-plyr-provider="vimeo" data-plyr-embed-id="143418951"></div>
+<div class="plyr__video-embed" id="player">
+    <iframe src="https://player.vimeo.com/video/76979871?loop=false&amp;byline=false&amp;portrait=false&amp;title=false&amp;speed=true&amp;transparent=0&amp;gesture=media" allowfullscreen allowtransparency allow="autoplay"></iframe>
+</div>
 ```
-
-Note: In both cases, `data-plyr-embed-id` value can be the ID or URL for the media.
 
 ### JavaScript
 
@@ -120,7 +122,7 @@ Include the `plyr.js` script before the closing `</body>` tag and then call `ply
 If you want to use our CDN (provided by [Fastly](https://www.fastly.com/)) for the JavaScript, you can use the following:
 
 ```html
-<script src="https://cdn.plyr.io/2.0.13/plyr.js"></script>
+<script src="https://cdn.plyr.io/3.0.0-beta.2/plyr.js"></script>
 ```
 
 ### CSS
@@ -134,13 +136,13 @@ Include the `plyr.css` stylsheet into your `<head>`
 If you want to use our CDN (provided by [Fastly](https://www.fastly.com/)) for the default CSS, you can use the following:
 
 ```html
-<link rel="stylesheet" href="https://cdn.plyr.io/2.0.13/plyr.css">
+<link rel="stylesheet" href="https://cdn.plyr.io/3.0.0-beta.2/plyr.css">
 ```
 
 ### SVG Sprite
 
 The SVG sprite is loaded automatically from our CDN (provided by [Fastly](https://www.fastly.com/)). To change this, see the [options](#options) below. For
-reference, the CDN hosted SVG sprite can be found at `https://cdn.plyr.io/2.0.13/plyr.svg`.
+reference, the CDN hosted SVG sprite can be found at `https://cdn.plyr.io/3.0.0-beta.2/plyr.svg`.
 
 ## Advanced
 
@@ -211,8 +213,7 @@ Passing a [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList):
 const player = new Plyr(document.querySelectorAll('.js-player'));
 ```
 
-The NodeList, HTMLElement or string selector can be the target `<video>`, `<audio>` or `[data-plyr-provider]` (for embeds) element itself or a container
-element.
+The NodeList, HTMLElement or string selector can be the target `<video>`, `<audio>`, or `<div>` wrapper for embeds
 
 The second argument for the constructor is the [#options](options) object:
 
@@ -260,7 +261,7 @@ Note the single quotes encapsulating the JSON and double quotes on the object ke
 | `displayDuration`    | Boolean           | `true`                                                                                                                         | Displays the duration of the media on the "metadataloaded" event (on startup) in the current time display. This will only work if the `preload` attribute is not set to `none` (or is not set at all) and you choose not to display the duration (see `controls` option).                                                                        |
 | `invertTime`         | Boolean           | `true`                                                                                                                         | Display the current time as a countdown rather than an incremental counter.                                                                                                                                                                                                                                                                      |
 | `toggleInvert`       | Boolean           | `true`                                                                                                                         | Allow users to click to toggle the above.                                                                                                                                                                                                                                                                                                        |
-| `listeners`          | Object            | `null`                                                                                                                         | Allows binding of event listeners to the controls before the default handlers. See the `defaults.js` for available listeners. IF your handler prevents default on the event, the default handler will not fire.                                                                                                                                  |
+| `listeners`          | Object            | `null`                                                                                                                         | Allows binding of event listeners to the controls before the default handlers. See the `defaults.js` for available listeners. If your handler prevents default on the event (`event.preventDefault()`), the default handler will not fire.                                                                                                       |
 | `captions`           | Object            | `{ active: false, language: window.navigator.language.split('-')[0] }`                                                         | `active`: Toggles if captions should be active by default. `language`: Sets the default language to load (if available).                                                                                                                                                                                                                         |
 | `fullscreen`         | Object            | `{ enabled: true, fallback: true }`                                                                                            | `enabled`: Toggles whether fullscreen should be enabled. `fallback`: Allow fallback to a full-window solution.                                                                                                                                                                                                                                   |
 | `ratio`              | String            | `16:9`                                                                                                                         | The aspect ratio you want to use for embedded players.                                                                                                                                                                                                                                                                                           |
