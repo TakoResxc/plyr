@@ -5,8 +5,6 @@
 import utils from './utils';
 import captions from './captions';
 import controls from './controls';
-import fullscreen from './fullscreen';
-import listeners from './listeners';
 import googleCast from './plugins/google-cast';
 
 const ui = {
@@ -27,18 +25,12 @@ const ui = {
     // Setup the UI
     build() {
         // Re-attach media element listeners
-        // TODO: Use event bubbling
-        listeners.media.call(this);
+        // TODO: Use event bubbling?
+        this.listeners.media();
 
         // Don't setup interface if no support
         if (!this.supported.ui) {
             this.debug.warn(`Basic support only for ${this.provider} ${this.type}`);
-
-            // Remove controls
-            utils.removeElement.call(this, 'controls');
-
-            // Remove large play
-            utils.removeElement.call(this, 'buttons.play');
 
             // Restore native controls
             ui.toggleNativeControls.call(this, true);
@@ -53,7 +45,7 @@ const ui = {
             controls.inject.call(this);
 
             // Re-attach control listeners
-            listeners.controls.call(this);
+            this.listeners.controls();
         }
 
         // If there's no controls, bail
@@ -63,9 +55,6 @@ const ui = {
 
         // Remove native controls
         ui.toggleNativeControls.call(this);
-
-        // Setup fullscreen
-        fullscreen.setup.call(this);
 
         // Captions
         captions.setup.call(this);
@@ -98,7 +87,9 @@ const ui = {
         this.ready = true;
 
         // Ready event at end of execution stack
-        utils.dispatchEvent.call(this, this.media, 'ready');
+        setTimeout(() => {
+            utils.dispatchEvent.call(this, this.media, 'ready');
+        }, 0);
 
         // Set the title
         ui.setTitle.call(this);
@@ -146,10 +137,8 @@ const ui = {
         utils.toggleClass(this.elements.container, this.config.classNames.playing, this.playing);
         utils.toggleClass(this.elements.container, this.config.classNames.stopped, this.paused);
 
-        // Set aria state
-        if (utils.is.nodeList(this.elements.buttons.play)) {
-            Array.from(this.elements.buttons.play).forEach(button => utils.toggleState(button, this.playing));
-        }
+        // Set ARIA state
+        utils.toggleState(this.elements.buttons.play, this.playing);
 
         // Toggle controls
         this.toggleControls(!this.playing);
@@ -270,21 +259,7 @@ const ui = {
                 // Check buffer status
                 case 'playing':
                 case 'progress':
-                    value = (() => {
-                        const { buffered } = this.media;
-
-                        if (buffered && buffered.length) {
-                            // HTML5
-                            return utils.getPercentage(buffered.end(0), this.duration);
-                        } else if (utils.is.number(buffered)) {
-                            // YouTube returns between 0 and 1
-                            return buffered * 100;
-                        }
-
-                        return 0;
-                    })();
-
-                    ui.setProgress.call(this, this.elements.display.buffer, value);
+                    ui.setProgress.call(this, this.elements.display.buffer, this.buffered * 100);
 
                     break;
 
@@ -301,29 +276,11 @@ const ui = {
             return;
         }
 
-        // Format time component to add leading zero
-        const format = value => `0${value}`.slice(-2);
+        // Always display hours if duration is over an hour
+        const displayHours = utils.getHours(this.duration) > 0;
 
-        // Helpers
-        const getHours = value => parseInt((value / 60 / 60) % 60, 10);
-        const getMinutes = value => parseInt((value / 60) % 60, 10);
-        const getSeconds = value => parseInt(value % 60, 10);
-
-        // Breakdown to hours, mins, secs
-        let hours = getHours(time);
-        const mins = getMinutes(time);
-        const secs = getSeconds(time);
-
-        // Do we need to display hours?
-        if (getHours(this.duration) > 0) {
-            hours = `${hours}:`;
-        } else {
-            hours = '';
-        }
-
-        // Render
         // eslint-disable-next-line no-param-reassign
-        target.textContent = `${inverted ? '-' : ''}${hours}${format(mins)}:${format(secs)}`;
+        target.textContent = utils.formatTime(time, displayHours, inverted);
     },
 
     // Handle time change event
@@ -349,13 +306,16 @@ const ui = {
             return;
         }
 
+        // If there's a spot to display duration
+        const hasDuration = utils.is.element(this.elements.display.duration);
+
         // If there's only one time display, display duration there
-        if (!utils.is.element(this.elements.display.duration) && this.config.displayDuration && this.paused) {
+        if (!hasDuration && this.config.displayDuration && this.paused) {
             ui.updateTimeDisplay.call(this, this.elements.display.currentTime, this.duration);
         }
 
         // If there's a duration element, update content
-        if (utils.is.element(this.elements.display.duration)) {
+        if (hasDuration) {
             ui.updateTimeDisplay.call(this, this.elements.display.duration, this.duration);
         }
 

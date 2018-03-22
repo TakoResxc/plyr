@@ -30,13 +30,9 @@ const support = {
                 break;
 
             case 'youtube:video':
-                api = true;
-                ui = support.rangeInput && (!browser.isIPhone || playsInline);
-                break;
-
             case 'vimeo:video':
                 api = true;
-                ui = support.rangeInput && !browser.isIPhone;
+                ui = support.rangeInput && (!browser.isIPhone || playsInline);
                 break;
 
             default:
@@ -153,7 +149,7 @@ const support = {
     touch: 'ontouchstart' in document.documentElement,
 
     // Detect transitions support
-    transitions: utils.transitionEnd !== false,
+    transitions: utils.transitionEndEvent !== false,
 
     // Reduced motion iOS & MacOS setting
     // https://webkit.org/blog/7551/responsive-design-for-motion/

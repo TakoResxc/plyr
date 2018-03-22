@@ -1,11 +1,6 @@
 // ==========================================================================
-// Color
+// Badges
 // ==========================================================================
 
-.color--vimeo {
-    color: $color-vimeo;
-}
-
-.color--youtube {
-    color: $color-youtube;
-}
+$plyr-badge-bg: $plyr-color-fiord !default;
+$plyr-badge-color: #fff !default;

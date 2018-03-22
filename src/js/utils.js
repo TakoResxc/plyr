@@ -2,6 +2,8 @@
 // Plyr utils
 // ==========================================================================
 
+import loadjs from 'loadjs';
+
 import support from './support';
 import { providers } from './types';
 
@@ -9,7 +11,7 @@ const utils = {
     // Check variable types
     is: {
         plyr(input) {
-            return this.instanceof(input, Plyr);
+            return this.instanceof(input, window.Plyr);
         },
         object(input) {
             return this.getConstructor(input) === Object;
@@ -50,6 +52,9 @@ const utils = {
         track(input) {
             return this.instanceof(input, TextTrack) || (!this.nullOrUndefined(input) && this.string(input.kind));
         },
+        url(input) {
+            return !this.nullOrUndefined(input) && /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-/]))?/.test(input);
+        },
         nullOrUndefined(input) {
             return input === null || typeof input === 'undefined';
         },
@@ -78,42 +83,54 @@ const utils = {
         };
     },
 
+    // Fetch wrapper
+    // Using XHR to avoid issues with older browsers
+    fetch(url, responseType = 'text') {
+        return new Promise((resolve, reject) => {
+            try {
+                const request = new XMLHttpRequest();
+
+                // Check for CORS support
+                if (!('withCredentials' in request)) {
+                    return;
+                }
+
+                request.addEventListener('load', () => {
+                    if (responseType === 'text') {
+                        try {
+                            resolve(JSON.parse(request.responseText));
+                        } catch (e) {
+                            resolve(request.responseText);
+                        }
+                    } else {
+                        resolve(request.response);
+                    }
+                });
+
+                request.addEventListener('error', () => {
+                    throw new Error(request.statusText);
+                });
+
+                request.open('GET', url, true);
+
+                // Set the required response type
+                request.responseType = responseType;
+
+                request.send();
+            } catch (e) {
+                reject(e);
+            }
+        });
+    },
+
     // Load an external script
-    loadScript(url, callback) {
-        const current = document.querySelector(`script[src="${url}"]`);
-
-        // Check script is not already referenced, if so wait for load
-        if (current !== null) {
-            current.callbacks = current.callbacks || [];
-            current.callbacks.push(callback);
-            return;
-        }
-
-        // Build the element
-        const element = document.createElement('script');
-
-        // Callback queue
-        element.callbacks = element.callbacks || [];
-        element.callbacks.push(callback);
-
-        // Bind callback
-        if (utils.is.function(callback)) {
-            element.addEventListener(
-                'load',
-                event => {
-                    element.callbacks.forEach(cb => cb.call(null, event));
-                    element.callbacks = null;
-                },
-                false,
-            );
-        }
-
-        // Set the URL after binding callback
-        element.src = url;
-
-        // Inject
-        const first = document.getElementsByTagName('script')[0];
-        first.parentNode.insertBefore(element, first);
+    loadScript(url) {
+        return new Promise((resolve, reject) => {
+            loadjs(url, {
+                success: resolve,
+                error: reject,
+            });
+        });
     },
 
     // Load an external SVG sprite
@@ -126,7 +143,14 @@ const utils = {
         const hasId = utils.is.string(id);
         let isCached = false;
 
-        function updateSprite(data) {
+        const exists = () => document.querySelectorAll(`#${id}`).length;
+
+        function injectSprite(data) {
+            // Check again incase of race condition
+            if (hasId && exists()) {
+                return;
+            }
+
             // Inject content
             this.innerHTML = data;
 
@@ -134,8 +158,8 @@ const utils = {
             document.body.insertBefore(this, document.body.childNodes[0]);
         }
 
-        // Only load once
-        if (!hasId || !document.querySelectorAll(`#${id}`).length) {
+        // Only load once if ID set
+        if (!hasId || !exists()) {
             // Create container
             const container = document.createElement('div');
             utils.toggleHidden(container, true);
@@ -151,16 +175,16 @@ const utils = {
 
                 if (isCached) {
                     const data = JSON.parse(cached);
-                    updateSprite.call(container, data.content);
+                    injectSprite.call(container, data.content);
                     return;
                 }
             }
 
             // Get the sprite
-            fetch(url)
-                .then(response => (response.ok ? response.text() : null))
-                .then(text => {
-                    if (text === null) {
+            utils
+                .fetch(url)
+                .then(result => {
+                    if (utils.is.empty(result)) {
                         return;
                     }
 
@@ -168,12 +192,12 @@ const utils = {
                         window.localStorage.setItem(
                             prefix + id,
                             JSON.stringify({
-                                content: text,
+                                content: result,
                             }),
                         );
                     }
 
-                    updateSprite.call(container, text);
+                    injectSprite.call(container, result);
                 })
                 .catch(() => {});
         }
@@ -257,12 +281,15 @@ const utils = {
     // Remove an element
     removeElement(element) {
         if (!utils.is.element(element) || !utils.is.element(element.parentNode)) {
-            return null;
+            return;
+        }
+
+        if (utils.is.nodeList(element) || utils.is.array(element)) {
+            Array.from(element).forEach(utils.removeElement);
+            return;
         }
 
         element.parentNode.removeChild(element);
-
-        return element;
     },
 
     // Remove all child elements
@@ -420,7 +447,7 @@ const utils = {
                 pause: utils.getElement.call(this, this.config.selectors.buttons.pause),
                 restart: utils.getElement.call(this, this.config.selectors.buttons.restart),
                 rewind: utils.getElement.call(this, this.config.selectors.buttons.rewind),
-                forward: utils.getElement.call(this, this.config.selectors.buttons.forward),
+                fastForward: utils.getElement.call(this, this.config.selectors.buttons.fastForward),
                 mute: utils.getElement.call(this, this.config.selectors.buttons.mute),
                 pip: utils.getElement.call(this, this.config.selectors.buttons.pip),
                 airplay: utils.getElement.call(this, this.config.selectors.buttons.airplay),
@@ -477,46 +504,51 @@ const utils = {
     },
 
     // Trap focus inside container
-    trapFocus() {
+    trapFocus(element = null, toggle = false) {
+        if (!utils.is.element(element)) {
+            return;
+        }
+
         const focusable = utils.getElements.call(this, 'button:not(:disabled), input:not(:disabled), [tabindex]');
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
 
-        utils.on(
-            this.elements.container,
-            'keydown',
-            event => {
-                // Bail if not tab key or not fullscreen
-                if (event.key !== 'Tab' || event.keyCode !== 9 || !this.fullscreen.active) {
-                    return;
-                }
+        const trap = event => {
+            // Bail if not tab key or not fullscreen
+            if (event.key !== 'Tab' || event.keyCode !== 9) {
+                return;
+            }
 
-                // Get the current focused element
-                const focused = utils.getFocusElement();
+            // Get the current focused element
+            const focused = utils.getFocusElement();
 
-                if (focused === last && !event.shiftKey) {
-                    // Move focus to first element that can be tabbed if Shift isn't used
-                    first.focus();
-                    event.preventDefault();
-                } else if (focused === first && event.shiftKey) {
-                    // Move focus to last element that can be tabbed if Shift is used
-                    last.focus();
-                    event.preventDefault();
-                }
-            },
-            false,
-        );
+            if (focused === last && !event.shiftKey) {
+                // Move focus to first element that can be tabbed if Shift isn't used
+                first.focus();
+                event.preventDefault();
+            } else if (focused === first && event.shiftKey) {
+                // Move focus to last element that can be tabbed if Shift is used
+                last.focus();
+                event.preventDefault();
+            }
+        };
+
+        if (toggle) {
+            utils.on(this.elements.container, 'keydown', trap, false);
+        } else {
+            utils.off(this.elements.container, 'keydown', trap, false);
+        }
     },
 
     // Toggle event listener
     toggleListener(elements, event, callback, toggle, passive, capture) {
-        // Bail if no elements
-        if (utils.is.nullOrUndefined(elements)) {
+        // Bail if no elemetns, event, or callback
+        if (utils.is.empty(elements) || utils.is.empty(event) || !utils.is.function(callback)) {
             return;
         }
 
         // If a nodelist is passed, call itself on each node
-        if (utils.is.nodeList(elements)) {
+        if (utils.is.nodeList(elements) || utils.is.array(elements)) {
             // Create listener for each node
             Array.from(elements).forEach(element => {
                 if (element instanceof Node) {
@@ -563,7 +595,7 @@ const utils = {
     // Trigger event
     dispatchEvent(element, type, bubbles, detail) {
         // Bail if no element
-        if (!element || !type) {
+        if (!utils.is.element(element) || !utils.is.string(type)) {
             return;
         }
 
@@ -571,7 +603,7 @@ const utils = {
         const event = new CustomEvent(type, {
             bubbles: utils.is.boolean(bubbles) ? bubbles : false,
             detail: Object.assign({}, detail, {
-                plyr: this instanceof Plyr ? this : null,
+                plyr: utils.is.plyr(this) ? this : null,
             }),
         });
 
@@ -582,6 +614,12 @@ const utils = {
     // Toggle aria-pressed state on a toggle button
     // http://www.ssbbartgroup.com/blog/how-not-to-misuse-aria-states-properties-and-roles
     toggleState(element, input) {
+        // If multiple elements passed
+        if (utils.is.array(element) || utils.is.nodeList(element)) {
+            Array.from(element).forEach(target => utils.toggleState(target, input));
+            return;
+        }
+
         // Bail if no target
         if (!utils.is.element(element)) {
             return;
@@ -600,7 +638,45 @@ const utils = {
         if (current === 0 || max === 0 || Number.isNaN(current) || Number.isNaN(max)) {
             return 0;
         }
+
         return (current / max * 100).toFixed(2);
+    },
+
+    // Time helpers
+    getHours(value) {
+        return parseInt((value / 60 / 60) % 60, 10);
+    },
+    getMinutes(value) {
+        return parseInt((value / 60) % 60, 10);
+    },
+    getSeconds(value) {
+        return parseInt(value % 60, 10);
+    },
+
+    // Format time to UI friendly string
+    formatTime(time = 0, displayHours = false, inverted = false) {
+        // Bail if the value isn't a number
+        if (!utils.is.number(time)) {
+            return this.formatTime(null, displayHours, inverted);
+        }
+
+        // Format time component to add leading zero
+        const format = value => `0${value}`.slice(-2);
+
+        // Breakdown to hours, mins, secs
+        let hours = this.getHours(time);
+        const mins = this.getMinutes(time);
+        const secs = this.getSeconds(time);
+
+        // Do we need to display hours?
+        if (displayHours || hours > 0) {
+            hours = `${hours}:`;
+        } else {
+            hours = '';
+        }
+
+        // Render
+        return `${inverted ? '-' : ''}${hours}${format(mins)}:${format(secs)}`;
     },
 
     // Deep extend destination object with N more objects
@@ -729,7 +805,7 @@ const utils = {
     },
 
     // Get the transition end event
-    transitionEnd: (() => {
+    get transitionEndEvent() {
         const element = document.createElement('span');
 
         const events = {
@@ -741,15 +817,15 @@ const utils = {
 
         const type = Object.keys(events).find(event => element.style[event] !== undefined);
 
-        return typeof type === 'string' ? type : false;
-    })(),
+        return utils.is.string(type) ? events[type] : false;
+    },
 
     // Force repaint of element
     repaint(element) {
-        window.setTimeout(() => {
-            element.setAttribute('hidden', '');
+        setTimeout(() => {
+            utils.toggleHidden(element, true);
             element.offsetHeight; // eslint-disable-line
-            element.removeAttribute('hidden');
+            utils.toggleHidden(element, false);
         }, 0);
     },
 };

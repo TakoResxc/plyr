@@ -1,5 +1,6 @@
 // ==========================================================================
 // Plyr Captions
+// TODO: Create as class
 // ==========================================================================
 
 import support from './support';
@@ -39,13 +40,12 @@ const captions = {
         // Only Vimeo and HTML5 video supported at this point
         if (!this.isVideo || this.isYouTube || (this.isHTML5 && !support.textTracks)) {
             // Clear menu and hide
-            if (this.config.controls.includes('settings') && this.config.settings.includes('captions')) {
+            if (utils.is.array(this.config.controls) && this.config.controls.includes('settings') && this.config.settings.includes('captions')) {
                 controls.setCaptionsMenu.call(this);
             }
 
             return;
         }
-
         // Inject the container
         if (!utils.is.element(this.elements.captions)) {
             this.elements.captions = utils.createElement('div', utils.getAttributesFromSelector(this.config.selectors.captions));
@@ -56,9 +56,40 @@ const captions = {
         // Set the class hook
         utils.toggleClass(this.elements.container, this.config.classNames.captions.enabled, !utils.is.empty(captions.getTracks.call(this)));
 
+        // Get tracks
+        const tracks = captions.getTracks.call(this);
+
         // If no caption file exists, hide container for caption text
-        if (utils.is.empty(captions.getTracks.call(this))) {
+        if (utils.is.empty(tracks)) {
             return;
+        }
+
+        // Get browser info
+        const browser = utils.getBrowser();
+
+        // Fix IE captions if CORS is used
+        // Fetch captions and inject as blobs instead (data URIs not supported!)
+        if (browser.isIE && window.URL) {
+            const elements = this.media.querySelectorAll('track');
+
+            Array.from(elements).forEach(track => {
+                const src = track.getAttribute('src');
+                const href = utils.parseUrl(src);
+
+                if (href.hostname !== window.location.href.hostname && [
+                    'http:',
+                    'https:',
+                ].includes(href.protocol)) {
+                    utils
+                        .fetch(src, 'blob')
+                        .then(blob => {
+                            track.setAttribute('src', window.URL.createObjectURL(blob));
+                        })
+                        .catch(() => {
+                            utils.removeElement(track);
+                        });
+                }
+            });
         }
 
         // Set language
@@ -68,7 +99,7 @@ const captions = {
         captions.show.call(this);
 
         // Set available languages in list
-        if (this.config.controls.includes('settings') && this.config.settings.includes('captions')) {
+        if (utils.is.array(this.config.controls) && this.config.controls.includes('settings') && this.config.settings.includes('captions')) {
             controls.setCaptionsMenu.call(this);
         }
     },
@@ -78,7 +109,7 @@ const captions = {
         // Setup HTML5 track rendering
         if (this.isHTML5 && this.isVideo) {
             captions.getTracks.call(this).forEach(track => {
-                // Remove previous bindings
+                // Show track
                 utils.on(track, 'cuechange', event => captions.setCue.call(this, event));
 
                 // Turn off native caption rendering to avoid double captions
@@ -124,7 +155,8 @@ const captions = {
     setCue(input) {
         // Get the track from the event if needed
         const track = utils.is.event(input) ? input.target : input;
-        const active = track.activeCues[0];
+        const { activeCues } = track;
+        const active = activeCues.length && activeCues[0];
         const currentTrack = captions.getCurrentTrack.call(this);
 
         // Only display current track

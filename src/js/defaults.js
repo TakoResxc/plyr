@@ -1,4 +1,7 @@
-// Default config
+// ==========================================================================
+// Plyr default config
+// ==========================================================================
+
 const defaults = {
     // Disable
     enabled: true,
@@ -53,7 +56,7 @@ const defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/2.0.10/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.0.3/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -117,6 +120,7 @@ const defaults = {
     fullscreen: {
         enabled: true, // Allow fullscreen?
         fallback: true, // Fallback for vintage browsers
+        iosNative: false, // Use the native fullscreen in iOS (disables custom controls)
     },
 
     // Local storage
@@ -178,6 +182,7 @@ const defaults = {
         reset: 'Reset',
         none: 'None',
         disabled: 'Disabled',
+        advertisement: 'Ad',
     },
 
     // URLs
@@ -187,6 +192,9 @@ const defaults = {
         },
         youtube: {
             api: 'https://www.youtube.com/iframe_api',
+        },
+        googleIMA: {
+            api: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js',
         },
     },
 
@@ -250,6 +258,17 @@ const defaults = {
         'statechange',
         'qualitychange',
         'qualityrequested',
+
+        // Ads
+        'adsloaded',
+        'adscontentpause',
+        'adscontentresume',
+        'adstarted',
+        'adsmidpoint',
+        'adscomplete',
+        'adsallcomplete',
+        'adsimpression',
+        'adsclick',
     ],
 
     // Selectors
@@ -267,7 +286,7 @@ const defaults = {
             pause: '[data-plyr="pause"]',
             restart: '[data-plyr="restart"]',
             rewind: '[data-plyr="rewind"]',
-            forward: '[data-plyr="fast-forward"]',
+            fastForward: '[data-plyr="fast-forward"]',
             mute: '[data-plyr="mute"]',
             captions: '[data-plyr="captions"]',
             fullscreen: '[data-plyr="fullscreen"]',
@@ -304,6 +323,7 @@ const defaults = {
     classNames: {
         video: 'plyr__video-wrapper',
         embed: 'plyr__video-embed',
+        ads: 'plyr__ads',
         control: 'plyr__control',
         type: 'plyr--{0}',
         provider: 'plyr--{0}',
@@ -313,6 +333,7 @@ const defaults = {
         error: 'plyr--has-error',
         hover: 'plyr--hover',
         tooltip: 'plyr__tooltip',
+        cues: 'plyr__cues',
         hidden: 'plyr__sr-only',
         hideControls: 'plyr--hide-controls',
         isIos: 'plyr--is-ios',
@@ -347,9 +368,24 @@ const defaults = {
         },
     },
 
+    // Embed attributes
+    attributes: {
+        embed: {
+            provider: 'data-plyr-provider',
+            id: 'data-plyr-embed-id',
+        },
+    },
+
     // API keys
     keys: {
         google: null,
+    },
+
+    // Advertisements plugin
+    // Register for an account here: http://vi.ai/publisher-video-monetization/?aid=plyrio
+    ads: {
+        enabled: false,
+        publisherId: '',
     },
 };
 

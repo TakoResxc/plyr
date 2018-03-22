@@ -10,6 +10,7 @@
 @import 'settings/cosmetics';
 @import 'settings/type';
 
+@import 'settings/badges';
 @import 'settings/captions';
 @import 'settings/controls';
 @import 'settings/helpers';
@@ -39,6 +40,8 @@
 
 @import 'states/error';
 @import 'states/fullscreen';
+
+@import 'plugins/ads';
 
 @import 'utils/animation';
 @import 'utils/hidden';

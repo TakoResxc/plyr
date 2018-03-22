@@ -50,7 +50,7 @@ const controls = {
             icon,
             utils.extend(attributes, {
                 role: 'presentation',
-            })
+            }),
         );
 
         // Create the <use> to reference sprite
@@ -115,8 +115,8 @@ const controls = {
                 {
                     class: this.config.classNames.menu.badge,
                 },
-                text
-            )
+                text,
+            ),
         );
 
         return badge;
@@ -219,7 +219,16 @@ const controls = {
 
         utils.setAttributes(button, attributes);
 
-        this.elements.buttons[type] = button;
+        // We have multiple play buttons
+        if (type === 'play') {
+            if (!utils.is.array(this.elements.buttons[type])) {
+                this.elements.buttons[type] = [];
+            }
+
+            this.elements.buttons[type].push(button);
+        } else {
+            this.elements.buttons[type] = button;
+        }
 
         return button;
     },
@@ -233,7 +242,7 @@ const controls = {
                 for: attributes.id,
                 class: this.config.classNames.hidden,
             },
-            this.config.i18n[type]
+            this.config.i18n[type],
         );
 
         // Seek input
@@ -249,8 +258,8 @@ const controls = {
                     value: 0,
                     autocomplete: 'off',
                 },
-                attributes
-            )
+                attributes,
+            ),
         );
 
         this.elements.inputs[type] = input;
@@ -275,8 +284,8 @@ const controls = {
                     max: 100,
                     value: 0,
                 },
-                attributes
-            )
+                attributes,
+            ),
         );
 
         // Create the label inside
@@ -317,8 +326,8 @@ const controls = {
                 {
                     class: this.config.classNames.hidden,
                 },
-                this.config.i18n[type]
-            )
+                this.config.i18n[type],
+            ),
         );
 
         container.appendChild(utils.createElement('span', utils.getAttributesFromSelector(this.config.selectors.display[type]), '00:00'));
@@ -344,7 +353,7 @@ const controls = {
                 value,
                 checked,
                 class: 'plyr__sr-only',
-            })
+            }),
         );
 
         const faux = utils.createElement('span', { 'aria-hidden': true });
@@ -422,6 +431,11 @@ const controls = {
     // Set the YouTube quality menu
     // TODO: Support for HTML5
     setQualityMenu(options) {
+        // Menu required
+        if (!utils.is.element(this.elements.settings.panes.quality)) {
+            return;
+        }
+
         const type = 'quality';
         const list = this.elements.settings.panes.quality.querySelector('ul');
 
@@ -477,7 +491,7 @@ const controls = {
         };
 
         this.options.quality.forEach(quality =>
-            controls.createMenuItem.call(this, quality, list, type, controls.getLabel.call(this, 'quality', quality), getBadge(quality))
+            controls.createMenuItem.call(this, quality, list, type, controls.getLabel.call(this, 'quality', quality), getBadge(quality)),
         );
 
         controls.updateSetting.call(this, type, list);
@@ -578,6 +592,11 @@ const controls = {
 
     // Set the looping options
     /* setLoopMenu() {
+        // Menu required
+        if (!utils.is.element(this.elements.settings.panes.loop)) {
+            return;
+        }
+
         const options = ['start', 'end', 'all', 'reset'];
         const list = this.elements.settings.panes.loop.querySelector('ul');
 
@@ -676,7 +695,7 @@ const controls = {
                 'language',
                 track.label || track.language,
                 controls.createBadge.call(this, track.language.toUpperCase()),
-                track.language.toLowerCase() === this.captions.language.toLowerCase()
+                track.language.toLowerCase() === this.captions.language.toLowerCase(),
             );
         });
 
@@ -685,10 +704,15 @@ const controls = {
 
     // Set a list of available captions languages
     setSpeedMenu() {
+        // Menu required
+        if (!utils.is.element(this.elements.settings.panes.speed)) {
+            return;
+        }
+
         const type = 'speed';
 
         // Set the default speeds
-        if (!utils.is.object(this.options.speed) || !Object.keys(this.options.speed).length) {
+        if (!utils.is.array(this.options.speed) || !this.options.speed.length) {
             this.options.speed = [
                 0.5,
                 0.75,
@@ -732,6 +756,12 @@ const controls = {
     toggleMenu(event) {
         const { form } = this.elements.settings;
         const button = this.elements.buttons.settings;
+
+        // Menu and button are required
+        if (!utils.is.element(form) || !utils.is.element(button)) {
+            return;
+        }
+
         const show = utils.is.boolean(event) ? event : utils.is.element(form) && form.getAttribute('aria-hidden') === 'true';
 
         if (utils.is.event(event)) {
@@ -849,11 +879,11 @@ const controls = {
                 container.style.height = '';
 
                 // Only listen once
-                utils.off(container, utils.transitionEnd, restore);
+                utils.off(container, utils.transitionEndEvent, restore);
             };
 
             // Listen for the transition finishing and restore auto height/width
-            utils.on(container, utils.transitionEnd, restore);
+            utils.on(container, utils.transitionEndEvent, restore);
 
             // Set dimensions to target
             container.style.width = `${size.width}px`;
@@ -897,12 +927,11 @@ const controls = {
         // Play/Pause button
         if (this.config.controls.includes('play')) {
             container.appendChild(controls.createButton.call(this, 'play'));
-            // container.appendChild(controls.createButton.call(this, 'pause'));
         }
 
         // Fast forward button
         if (this.config.controls.includes('fast-forward')) {
-            container.appendChild(controls.createButton.call(this, 'fast-forward'));
+            container.appendChild(controls.createButton.call(this, 'fastForward'));
         }
 
         // Progress
@@ -929,7 +958,7 @@ const controls = {
                         role: 'tooltip',
                         class: this.config.classNames.tooltip,
                     },
-                    '00:00'
+                    '00:00',
                 );
 
                 progress.appendChild(tooltip);
@@ -974,7 +1003,7 @@ const controls = {
                 'volume',
                 utils.extend(attributes, {
                     id: `plyr-volume-${data.id}`,
-                })
+                }),
             );
             volume.appendChild(range.label);
             volume.appendChild(range.input);
@@ -1006,7 +1035,7 @@ const controls = {
                     'aria-haspopup': true,
                     'aria-controls': `plyr-settings-${data.id}`,
                     'aria-expanded': false,
-                })
+                }),
             );
 
             const form = utils.createElement('form', {
@@ -1049,7 +1078,7 @@ const controls = {
                         'aria-controls': `plyr-settings-${data.id}-${type}`,
                         'aria-expanded': false,
                     }),
-                    this.config.i18n[type]
+                    this.config.i18n[type],
                 );
 
                 const value = utils.createElement('span', {
@@ -1089,7 +1118,7 @@ const controls = {
                         'aria-controls': `plyr-settings-${data.id}-home`,
                         'aria-expanded': false,
                     },
-                    this.config.i18n[type]
+                    this.config.i18n[type],
                 );
 
                 pane.appendChild(back);
@@ -1156,9 +1185,10 @@ const controls = {
 
         // Null by default
         let container = null;
+        this.elements.controls = null;
 
-        // HTML passed as the option
-        if (utils.is.string(this.config.controls)) {
+        // HTML or Element passed as the option
+        if (utils.is.string(this.config.controls) || utils.is.element(this.config.controls)) {
             container = this.config.controls;
         } else if (utils.is.function(this.config.controls)) {
             // A custom function to build controls
@@ -1202,7 +1232,7 @@ const controls = {
         }
 
         // Find the elements if need be
-        if (utils.is.element(this.elements.controls)) {
+        if (!utils.is.element(this.elements.controls)) {
             utils.findElements.call(this);
         }
 
@@ -1221,7 +1251,7 @@ const controls = {
                     this.config.selectors.labels,
                     ' .',
                     this.config.classNames.hidden,
-                ].join('')
+                ].join(''),
             );
 
             Array.from(labels).forEach(label => {

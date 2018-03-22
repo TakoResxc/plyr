@@ -16,9 +16,14 @@ const vimeo = {
 
         // Load the API if not already
         if (!utils.is.object(window.Vimeo)) {
-            utils.loadScript(this.config.urls.vimeo.api, () => {
-                vimeo.ready.call(this);
-            });
+            utils
+                .loadScript(this.config.urls.vimeo.api)
+                .then(() => {
+                    vimeo.ready.call(this);
+                })
+                .catch(error => {
+                    this.debug.warn('Vimeo API failed to load', error);
+                });
         } else {
             vimeo.ready.call(this);
         }
@@ -29,7 +34,7 @@ const vimeo = {
     setAspectRatio(input) {
         const ratio = utils.is.string(input) ? input.split(':') : this.config.ratio.split(':');
         const padding = 100 / ratio[0] * ratio[1];
-        const height = 200;
+        const height = 240;
         const offset = (height - padding) / (height / 50);
         this.elements.wrapper.style.paddingBottom = `${padding}%`;
         this.media.style.transform = `translateY(-${offset}%)`;
@@ -51,7 +56,16 @@ const vimeo = {
             gesture: 'media',
         };
         const params = utils.buildUrlParams(options);
-        const id = utils.parseVimeoId(player.media.getAttribute('src'));
+
+        // Get the source URL or ID
+        let source = player.media.getAttribute('src');
+
+        // Get from <div> if needed
+        if (utils.is.empty(source)) {
+            source = player.media.getAttribute(this.config.attributes.embed.id);
+        }
+
+        const id = utils.parseVimeoId(source);
 
         // Build an iframe
         const iframe = utils.createElement('iframe');
@@ -87,10 +101,8 @@ const vimeo = {
         };
 
         player.media.stop = () => {
-            player.embed.stop().then(() => {
-                player.media.paused = true;
-                player.currentTime = 0;
-            });
+            player.pause();
+            player.currentTime = 0;
         };
 
         // Seeking
@@ -302,7 +314,7 @@ const vimeo = {
         });
 
         // Rebuild UI
-        window.setTimeout(() => ui.build.call(player), 0);
+        setTimeout(() => ui.build.call(player), 0);
     },
 };
 

@@ -1,6 +1,6 @@
 // ==========================================================================
 // Plyr
-// plyr.js v3.0.0-beta.2
+// plyr.js v3.0.3
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
@@ -11,12 +11,13 @@ import support from './support';
 import utils from './utils';
 
 import Console from './console';
+import Fullscreen from './fullscreen';
+import Listeners from './listeners';
 import Storage from './storage';
+import Ads from './plugins/ads';
 
 import captions from './captions';
 import controls from './controls';
-import fullscreen from './fullscreen';
-import listeners from './listeners';
 import media from './media';
 import source from './source';
 import googleCast from './plugins/google-cast';
@@ -26,12 +27,6 @@ import ui from './ui';
 // Private properties
 // TODO: Use a WeakMap for private globals
 // const globals = new WeakMap();
-
-// Globals
-let scrollPosition = {
-    x: 0,
-    y: 0,
-};
 
 // Plyr instance
 class Plyr {
@@ -154,50 +149,53 @@ class Plyr {
                 // Find the frame
                 iframe = this.media.querySelector('iframe');
 
-                // <iframe> required
-                if (!utils.is.element(iframe)) {
-                    this.debug.error('Setup failed: <iframe> is missing');
-                    return;
+                // <iframe> type
+                if (utils.is.element(iframe)) {
+                    // Detect provider
+                    url = iframe.getAttribute('src');
+                    this.provider = utils.getProviderByUrl(url);
+
+                    // Rework elements
+                    this.elements.container = this.media;
+                    this.media = iframe;
+
+                    // Reset classname
+                    this.elements.container.className = '';
+
+                    // Get attributes from URL and set config
+                    params = utils.getUrlParams(url);
+                    if (!utils.is.empty(params)) {
+                        const truthy = [
+                            '1',
+                            'true',
+                        ];
+
+                        if (truthy.includes(params.autoplay)) {
+                            this.config.autoplay = true;
+                        }
+                        if (truthy.includes(params.playsinline)) {
+                            this.config.inline = true;
+                        }
+                        if (truthy.includes(params.loop)) {
+                            this.config.loop.active = true;
+                        }
+                    }
+                } else {
+                    // <div> with attributes
+                    this.provider = this.media.getAttribute(this.config.attributes.embed.provider);
+
+                    // Remove attribute
+                    this.media.removeAttribute(this.config.attributes.embed.provider);
                 }
 
-                // Audio will come later for external providers
-                this.type = types.video;
-
-                // Detect provider
-                url = iframe.getAttribute('src');
-                this.provider = utils.getProviderByUrl(url);
-
-                // Get attributes from URL and set config
-                params = utils.getUrlParams(url);
-                if (!utils.is.empty(params)) {
-                    const truthy = [
-                        '1',
-                        'true',
-                    ];
-
-                    if (truthy.includes(params.autoplay)) {
-                        this.config.autoplay = true;
-                    }
-                    if (truthy.includes(params.playsinline)) {
-                        this.config.inline = true;
-                    }
-                    if (truthy.includes(params.loop)) {
-                        this.config.loop.active = true;
-                    }
-                }
-
-                // Unsupported provider
+                // Unsupported or missing provider
                 if (utils.is.empty(this.provider) || !Object.keys(providers).includes(this.provider)) {
                     this.debug.error('Setup failed: Invalid provider');
                     return;
                 }
 
-                // Rework elements
-                this.elements.container = this.media;
-                this.media = iframe;
-
-                // Reset classname
-                this.elements.container.className = '';
+                // Audio will come later for external providers
+                this.type = types.video;
 
                 break;
 
@@ -230,9 +228,6 @@ class Plyr {
                 return;
         }
 
-        // Setup local storage for user settings
-        this.storage = new Storage(this);
-
         // Check for support again but with type
         this.supported = support.check(this.type, this.provider, this.config.inline);
 
@@ -241,6 +236,12 @@ class Plyr {
             this.debug.error('Setup failed: no support');
             return;
         }
+
+        // Create listeners
+        this.listeners = new Listeners(this);
+
+        // Setup local storage for user settings
+        this.storage = new Storage(this);
 
         // Store reference
         this.media.plyr = this;
@@ -253,9 +254,6 @@ class Plyr {
 
         // Allow focus to be captured
         this.elements.container.setAttribute('tabindex', 0);
-
-        // Global listeners
-        listeners.global.call(this);
 
         // Add style hook
         ui.addStyleHook.call(this);
@@ -275,6 +273,18 @@ class Plyr {
         if (this.isHTML5 || (this.isEmbed && !this.supported.ui)) {
             ui.build.call(this);
         }
+
+        // Container listeners
+        this.listeners.container();
+
+        // Global listeners
+        this.listeners.global();
+
+        // Setup fullscreen
+        this.fullscreen = new Fullscreen(this);
+
+        // Setup ads if provided
+        this.ads = new Ads(this);
     }
 
     // ---------------------------------------
@@ -285,28 +295,38 @@ class Plyr {
      * Types and provider helpers
      */
     get isHTML5() {
-        return this.provider === providers.html5;
+        return Boolean(this.provider === providers.html5);
     }
     get isEmbed() {
-        return this.isYouTube || this.isVimeo;
+        return Boolean(this.isYouTube || this.isVimeo);
     }
     get isYouTube() {
-        return this.provider === providers.youtube;
+        return Boolean(this.provider === providers.youtube);
     }
     get isVimeo() {
-        return this.provider === providers.vimeo;
+        return Boolean(this.provider === providers.vimeo);
     }
     get isVideo() {
-        return this.type === types.video;
+        return Boolean(this.type === types.video);
     }
     get isAudio() {
-        return this.type === types.audio;
+        return Boolean(this.type === types.audio);
     }
 
     /**
-     * Play the media
+     * Play the media, or play the advertisement (if they are not blocked)
      */
     play() {
+        if (!utils.is.function(this.media.play)) {
+            return null;
+        }
+
+        // If ads are enabled, wait for them first
+        if (this.ads.enabled && !this.ads.initialized) {
+            return this.ads.managerPromise.then(() => this.ads.play()).catch(() => this.media.play());
+        }
+
+        // Return the promise (for HTML5)
         return this.media.play();
     }
 
@@ -314,7 +334,7 @@ class Plyr {
      * Pause the media
      */
     pause() {
-        if (!this.playing) {
+        if (!this.playing || !utils.is.function(this.media.pause)) {
             return;
         }
 
@@ -325,21 +345,21 @@ class Plyr {
      * Get paused state
      */
     get paused() {
-        return this.media.paused;
+        return Boolean(this.media.paused);
     }
 
     /**
      * Get playing state
      */
     get playing() {
-        return !this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true);
+        return Boolean(!this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true));
     }
 
     /**
      * Get ended state
      */
     get ended() {
-        return this.media.ended;
+        return Boolean(this.media.ended);
     }
 
     /**
@@ -361,8 +381,11 @@ class Plyr {
      * Stop playback
      */
     stop() {
-        this.restart();
-        this.pause();
+        if (this.isHTML5) {
+            this.media.load();
+        } else {
+            this.media.stop();
+        }
     }
 
     /**
@@ -407,7 +430,7 @@ class Plyr {
         }
 
         // Set
-        this.media.currentTime = targetTime.toFixed(4);
+        this.media.currentTime = parseFloat(targetTime.toFixed(4));
 
         // Logging
         this.debug.log(`Seeking to ${this.currentTime} seconds`);
@@ -421,10 +444,31 @@ class Plyr {
     }
 
     /**
+     * Get buffered
+     */
+    get buffered() {
+        const { buffered } = this.media;
+
+        // YouTube / Vimeo return a float between 0-1
+        if (utils.is.number(buffered)) {
+            return buffered;
+        }
+
+        // HTML5
+        // TODO: Handle buffered chunks of the media
+        // (i.e. seek to another section buffers only that section)
+        if (buffered && buffered.length && this.duration > 0) {
+            return buffered.end(0) / this.duration;
+        }
+
+        return 0;
+    }
+
+    /**
      * Get seeking status
      */
     get seeking() {
-        return this.media.seeking;
+        return Boolean(this.media.seeking);
     }
 
     /**
@@ -435,7 +479,7 @@ class Plyr {
         const fauxDuration = parseInt(this.config.duration, 10);
 
         // True duration
-        const realDuration = Number(this.media.duration);
+        const realDuration = this.media ? Number(this.media.duration) : 0;
 
         // If custom duration is funky, use regular duration
         return !Number.isNaN(fauxDuration) ? fauxDuration : realDuration;
@@ -489,7 +533,7 @@ class Plyr {
      * Get the current player volume
      */
     get volume() {
-        return this.media.volume;
+        return Number(this.media.volume);
     }
 
     /**
@@ -538,7 +582,7 @@ class Plyr {
      * Get current muted state
      */
     get muted() {
-        return this.media.muted;
+        return Boolean(this.media.muted);
     }
 
     /**
@@ -550,13 +594,21 @@ class Plyr {
             return true;
         }
 
+        if (this.isAudio) {
+            return true;
+        }
+
         // Get audio tracks
-        return this.media.mozHasAudio || Boolean(this.media.webkitAudioDecodedByteCount) || Boolean(this.media.audioTracks && this.media.audioTracks.length);
+        return (
+            Boolean(this.media.mozHasAudio) ||
+            Boolean(this.media.webkitAudioDecodedByteCount) ||
+            Boolean(this.media.audioTracks && this.media.audioTracks.length)
+        );
     }
 
     /**
      * Set playback speed
-     * @param {decimal} speed - the speed of playback (0.5-2.0)
+     * @param {number} speed - the speed of playback (0.5-2.0)
      */
     set speed(input) {
         let speed = null;
@@ -597,7 +649,7 @@ class Plyr {
      * Get current playback speed
      */
     get speed() {
-        return this.media.playbackRate;
+        return Number(this.media.playbackRate);
     }
 
     /**
@@ -697,7 +749,7 @@ class Plyr {
      * Get current loop state
      */
     get loop() {
-        return this.media.loop;
+        return Boolean(this.media.loop);
     }
 
     /**
@@ -754,7 +806,7 @@ class Plyr {
      * Get the current autoplay state
      */
     get autoplay() {
-        return this.config.autoplay;
+        return Boolean(this.config.autoplay);
     }
 
     /**
@@ -832,62 +884,6 @@ class Plyr {
      */
     get language() {
         return this.captions.language;
-    }
-
-    /**
-     * Toggle fullscreen playback
-     * Requires user input event
-     * @param {event} event
-     */
-    toggleFullscreen(event) {
-        // Video only
-        if (this.isAudio) {
-            return;
-        }
-
-        // Check for native support
-        if (fullscreen.enabled) {
-            if (utils.is.event(event) && event.type === fullscreen.eventType) {
-                // If it's a fullscreen change event, update the state
-                this.fullscreen.active = fullscreen.isFullScreen(this.elements.container);
-            } else {
-                // Else it's a user request to enter or exit
-                if (!this.fullscreen.active) {
-                    fullscreen.requestFullScreen(this.elements.container);
-                } else {
-                    fullscreen.cancelFullScreen();
-                }
-
-                return;
-            }
-        } else {
-            // Otherwise, it's a simple toggle
-            this.fullscreen.active = !this.fullscreen.active;
-
-            // Add class hook
-            utils.toggleClass(this.elements.container, this.config.classNames.fullscreen.fallback, this.fullscreen.active);
-
-            // Make sure we don't lose scroll position
-            if (this.fullscreen.active) {
-                scrollPosition = {
-                    x: window.pageXOffset || 0,
-                    y: window.pageYOffset || 0,
-                };
-            } else {
-                window.scrollTo(scrollPosition.x, scrollPosition.y);
-            }
-
-            // Bind/unbind escape key
-            document.body.style.overflow = this.fullscreen.active ? 'hidden' : '';
-        }
-
-        // Set button state
-        if (utils.is.element(this.elements.buttons.fullscreen)) {
-            utils.toggleState(this.elements.buttons.fullscreen, this.fullscreen.active);
-        }
-
-        // Trigger an event
-        utils.dispatchEvent.call(this, this.media, this.fullscreen.active ? 'enterfullscreen' : 'exitfullscreen');
     }
 
     /**
@@ -1000,7 +996,7 @@ class Plyr {
         }
 
         // Clear timer on every call
-        window.clearTimeout(this.timers.controls);
+        clearTimeout(this.timers.controls);
 
         // If the mouse is not over the controls, set a timeout to hide them
         if (show || this.paused || this.loading) {
@@ -1026,15 +1022,7 @@ class Plyr {
         // If toggle is false or if we're playing (regardless of toggle),
         // then set the timer to hide the controls
         if (!show || this.playing) {
-            this.timers.controls = window.setTimeout(() => {
-                /* this.debug.warn({
-                    pressed: this.elements.controls.pressed,
-                    hover: this.elements.controls.pressed,
-                    playing: this.playing,
-                    paused: this.paused,
-                    loading: this.loading,
-                }); */
-
+            this.timers.controls = setTimeout(() => {
                 // If the mouse is over the controls (and not entering fullscreen), bail
                 if ((this.elements.controls.pressed || this.elements.controls.hover) && !isEnterFullscreen) {
                     return;
@@ -1086,6 +1074,10 @@ class Plyr {
      * @param {boolean} soft - Whether it's a soft destroy (for source changes etc)
      */
     destroy(callback, soft = false) {
+        if (!this.ready) {
+            return;
+        }
+
         const done = () => {
             // Reset overflow (incase destroyed while in fullscreen)
             document.body.style.overflow = '';
@@ -1096,12 +1088,8 @@ class Plyr {
             // If it's a soft destroy, make minimal changes
             if (soft) {
                 if (Object.keys(this.elements).length) {
-                    // Remove buttons
-                    if (this.elements.buttons && this.elements.buttons.play) {
-                        Array.from(this.elements.buttons.play).forEach(button => utils.removeElement(button));
-                    }
-
-                    // Remove others
+                    // Remove elements
+                    utils.removeElement(this.elements.buttons.play);
                     utils.removeElement(this.elements.captions);
                     utils.removeElement(this.elements.controls);
                     utils.removeElement(this.elements.wrapper);
@@ -1118,6 +1106,9 @@ class Plyr {
                     callback();
                 }
             } else {
+                // Unbind listeners
+                this.listeners.clear();
+
                 // Replace the container with the original element provided
                 utils.replaceElement(this.elements.original, this.elements.container);
 
@@ -1129,15 +1120,27 @@ class Plyr {
                     callback.call(this.elements.original);
                 }
 
-                // Clear for GC
-                this.elements = null;
+                // Reset state
+                this.ready = false;
+
+                // Clear for garbage collection
+                setTimeout(() => {
+                    this.elements = null;
+                    this.media = null;
+                }, 200);
             }
         };
+
+        // Stop playback
+        this.stop();
 
         // Type specific stuff
         switch (`${this.provider}:${this.type}`) {
             case 'html5:video':
             case 'html5:audio':
+                // Clear timeout
+                clearTimeout(this.timers.loading);
+
                 // Restore native video controls
                 ui.toggleNativeControls.call(this, true);
 
@@ -1148,11 +1151,11 @@ class Plyr {
 
             case 'youtube:video':
                 // Clear timers
-                window.clearInterval(this.timers.buffering);
-                window.clearInterval(this.timers.playing);
+                clearInterval(this.timers.buffering);
+                clearInterval(this.timers.playing);
 
                 // Destroy YouTube API
-                if (this.embed !== null) {
+                if (this.embed !== null && utils.is.function(this.embed.destroy)) {
                     this.embed.destroy();
                 }
 
@@ -1169,7 +1172,7 @@ class Plyr {
                 }
 
                 // Vimeo does not always return
-                window.setTimeout(done, 200);
+                setTimeout(done, 200);
 
                 break;
 

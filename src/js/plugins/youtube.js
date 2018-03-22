@@ -19,7 +19,9 @@ const youtube = {
             youtube.ready.call(this);
         } else {
             // Load the API
-            utils.loadScript(this.config.urls.youtube.api);
+            utils.loadScript(this.config.urls.youtube.api).catch(error => {
+                this.debug.warn('YouTube API failed to load', error);
+            });
 
             // Setup callback for the API
             // YouTube has it's own system of course...
@@ -59,10 +61,10 @@ const youtube = {
         if (utils.is.string(key) && !utils.is.empty(key)) {
             const url = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${key}&fields=items(snippet(title))&part=snippet`;
 
-            fetch(url)
-                .then(response => (response.ok ? response.json() : null))
+            utils
+                .fetch(url)
                 .then(result => {
-                    if (result !== null && utils.is.object(result)) {
+                    if (utils.is.object(result)) {
                         this.config.title = result.items[0].snippet.title;
                         ui.setTitle.call(this);
                     }
@@ -87,8 +89,16 @@ const youtube = {
             return;
         }
 
+        // Get the source URL or ID
+        let source = player.media.getAttribute('src');
+
+        // Get from <div> if needed
+        if (utils.is.empty(source)) {
+            source = player.media.getAttribute(this.config.attributes.embed.id);
+        }
+
         // Replace the <iframe> with a <div> due to YouTube API issues
-        const videoId = utils.parseYouTubeId(player.media.getAttribute('src'));
+        const videoId = utils.parseYouTubeId(source);
         const id = utils.generateId(player.provider);
         const container = utils.createElement('div', { id });
         player.media = utils.replaceElement(container, player.media);
@@ -108,8 +118,8 @@ const youtube = {
                 playsinline: 1, // Allow iOS inline playback
 
                 // Tracking for stats
-                origin: window && window.location.hostname,
-                widget_referrer: window && window.location.href,
+                // origin: window ? `${window.location.protocol}//${window.location.host}` : null,
+                widget_referrer: window ? window.location.href : null,
 
                 // Captions are flaky on YouTube
                 cc_load_policy: player.captions.active ? 1 : 0,
@@ -186,17 +196,14 @@ const youtube = {
                     // Create a faux HTML5 API using the YouTube API
                     player.media.play = () => {
                         instance.playVideo();
-                        player.media.paused = false;
                     };
 
                     player.media.pause = () => {
                         instance.pauseVideo();
-                        player.media.paused = true;
                     };
 
                     player.media.stop = () => {
                         instance.stopVideo();
-                        player.media.paused = true;
                     };
 
                     player.media.duration = instance.getDuration();
@@ -298,10 +305,10 @@ const youtube = {
                     utils.dispatchEvent.call(player, player.media, 'durationchange');
 
                     // Reset timer
-                    window.clearInterval(player.timers.buffering);
+                    clearInterval(player.timers.buffering);
 
                     // Setup buffering
-                    player.timers.buffering = window.setInterval(() => {
+                    player.timers.buffering = setInterval(() => {
                         // Get loaded % from YouTube
                         player.media.buffered = instance.getVideoLoadedFraction();
 
@@ -315,7 +322,7 @@ const youtube = {
 
                         // Bail if we're at 100%
                         if (player.media.buffered === 1) {
-                            window.clearInterval(player.timers.buffering);
+                            clearInterval(player.timers.buffering);
 
                             // Trigger event
                             utils.dispatchEvent.call(player, player.media, 'canplaythrough');
@@ -323,14 +330,16 @@ const youtube = {
                     }, 200);
 
                     // Rebuild UI
-                    window.setTimeout(() => ui.build.call(player), 50);
+                    setTimeout(() => ui.build.call(player), 50);
                 },
                 onStateChange(event) {
                     // Get the instance
                     const instance = event.target;
 
                     // Reset timer
-                    window.clearInterval(player.timers.playing);
+                    clearInterval(player.timers.playing);
+
+                    console.warn(event.data);
 
                     // Handle events
                     // -1   Unstarted
@@ -340,6 +349,16 @@ const youtube = {
                     // 3    Buffering
                     // 5    Video cued
                     switch (event.data) {
+                        case -1:
+                            // Update scrubber
+                            utils.dispatchEvent.call(player, player.media, 'timeupdate');
+
+                            // Get loaded % from YouTube
+                            player.media.buffered = instance.getVideoLoadedFraction();
+                            utils.dispatchEvent.call(player, player.media, 'progress');
+
+                            break;
+
                         case 0:
                             player.media.paused = true;
 
@@ -370,7 +389,7 @@ const youtube = {
                             utils.dispatchEvent.call(player, player.media, 'playing');
 
                             // Poll to get playback progress
-                            player.timers.playing = window.setInterval(() => {
+                            player.timers.playing = setInterval(() => {
                                 utils.dispatchEvent.call(player, player.media, 'timeupdate');
                             }, 50);
 

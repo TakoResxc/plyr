@@ -9,6 +9,7 @@ const path = require('path');
 const gulp = require('gulp');
 const gutil = require('gulp-util');
 const concat = require('gulp-concat');
+const filter = require('gulp-filter');
 const sass = require('gulp-sass');
 const cleancss = require('gulp-clean-css');
 const run = require('run-sequence');
@@ -24,8 +25,7 @@ const size = require('gulp-size');
 const rollup = require('gulp-better-rollup');
 const babel = require('rollup-plugin-babel');
 const sourcemaps = require('gulp-sourcemaps');
-const uglify = require('rollup-plugin-uglify');
-const { minify } = require('uglify-es');
+const uglify = require('gulp-uglify-es').default;
 const commonjs = require('rollup-plugin-commonjs');
 const resolve = require('rollup-plugin-node-resolve');
 
@@ -39,6 +39,8 @@ try {
 } catch (e) {
     // Do nothing
 }
+
+const minSuffix = '.min';
 
 // Paths
 const root = __dirname;
@@ -68,8 +70,11 @@ const paths = {
         root: path.join(root, 'demo/'),
     },
     upload: [
-        path.join(root, 'dist/**'),
-        path.join(root, 'demo/dist/**'),
+        path.join(root, `dist/*${minSuffix}.*`),
+        path.join(root, 'dist/*.css'),
+        path.join(root, 'dist/*.svg'),
+        path.join(root, `demo/dist/*${minSuffix}.*`),
+        path.join(root, 'demo/dist/*.css'),
     ],
 };
 
@@ -122,12 +127,13 @@ const build = {
         Object.keys(files).forEach(key => {
             const name = `js:${key}`;
             tasks.js.push(name);
+            const { output } = paths[bundle];
 
             gulp.task(name, () =>
                 gulp
                     .src(bundles[bundle].js[key])
-                    .pipe(concat(key))
                     .pipe(sourcemaps.init())
+                    .pipe(concat(key))
                     .pipe(
                         rollup(
                             {
@@ -135,15 +141,19 @@ const build = {
                                     resolve(),
                                     commonjs(),
                                     babel(babelrc),
-                                    uglify({}, minify),
                                 ],
                             },
                             options,
                         ),
                     )
-                    .pipe(size(sizeOptions))
                     .pipe(sourcemaps.write(''))
-                    .pipe(gulp.dest(paths[bundle].output)),
+                    .pipe(gulp.dest(output))
+                    .pipe(filter('**/*.js'))
+                    .pipe(uglify())
+                    .pipe(size(sizeOptions))
+                    .pipe(rename({ suffix: minSuffix }))
+                    .pipe(sourcemaps.write(''))
+                    .pipe(gulp.dest(output)),
             );
         });
     },
@@ -195,7 +205,7 @@ build.sprite('plyr');
 
 // Demo files
 build.sass(bundles.demo.sass, 'demo');
-build.js(bundles.demo.js, 'demo', { format: 'es' });
+build.js(bundles.demo.js, 'demo', { format: 'iife' });
 
 // Build all JS
 gulp.task('js', () => {
@@ -266,6 +276,23 @@ if (Object.keys(aws).includes('cdn') && Object.keys(aws).includes('demo')) {
     const semver = new RegExp(`v${regex}`, 'gi');
     const localPath = new RegExp('(../)?dist', 'gi');
     const versionPath = `https://${aws.cdn.domain}/${version}`;
+    const cdnpath = new RegExp(`${aws.cdn.domain}/${regex}/`, 'gi');
+
+    gulp.task('version', () => {
+        console.log(`Updating versions to '${version}'...`);
+
+        // Replace versioned URLs in source
+        const files = [
+            'plyr.js',
+            'plyr.polyfilled.js',
+            'defaults.js',
+        ];
+        gulp
+            .src(files.map(file => path.join(root, `src/js/${file}`)))
+            .pipe(replace(semver, `v${version}`))
+            .pipe(replace(cdnpath, `${aws.cdn.domain}/${version}/`))
+            .pipe(gulp.dest(path.join(root, 'src/js/')));
+    });
 
     // Publish version to CDN bucket
     gulp.task('cdn', () => {
@@ -277,22 +304,26 @@ if (Object.keys(aws).includes('cdn') && Object.keys(aws).includes('demo')) {
         console.log(`Uploading '${version}' to ${aws.cdn.domain}...`);
 
         // Upload to CDN
-        return gulp
-            .src(paths.upload)
-            .pipe(
-                size({
-                    showFiles: true,
-                    gzip: true,
-                }),
-            )
-            .pipe(
-                rename(p => {
-                    // eslint-disable-next-line
-                    p.dirname = p.dirname.replace('.', version);
-                }),
-            )
-            .pipe(replace(localPath, versionPath))
-            .pipe(s3(aws.cdn, options.cdn));
+        return (
+            gulp
+                .src(paths.upload)
+                .pipe(
+                    rename(p => {
+                        p.basename = p.basename.replace(minSuffix, ''); // eslint-disable-line
+                        p.dirname = p.dirname.replace('.', version); // eslint-disable-line
+                    }),
+                )
+                // Remove min suffix from source map URL
+                .pipe(replace(/sourceMappingURL=([\w-?.]+)/, (match, p1) => `sourceMappingURL=${p1.replace(minSuffix, '')}`))
+                .pipe(
+                    size({
+                        showFiles: true,
+                        gzip: true,
+                    }),
+                )
+                .pipe(replace(localPath, versionPath))
+                .pipe(s3(aws.cdn, options.cdn))
+        );
     });
 
     // Publish to demo bucket
@@ -304,20 +335,11 @@ if (Object.keys(aws).includes('cdn') && Object.keys(aws).includes('demo')) {
 
         console.log(`Uploading '${version}' demo to ${aws.demo.domain}...`);
 
-        const cdnpath = new RegExp(`${aws.cdn.domain}/${regex}/`, 'gi');
-
         // Replace versioned files in readme.md
         gulp
             .src([`${root}/readme.md`])
             .pipe(replace(cdnpath, `${aws.cdn.domain}/${version}/`))
             .pipe(gulp.dest(root));
-
-        // Replace versioned files in plyr.js
-        gulp
-            .src(path.join(root, 'src/js/plyr.js'))
-            .pipe(replace(semver, `v${version}`))
-            .pipe(replace(cdnpath, `${aws.cdn.domain}/${version}/`))
-            .pipe(gulp.dest(path.join(root, 'src/js/')));
 
         // Replace local file paths with remote paths in demo HTML
         // e.g. "../dist/plyr.js" to "https://cdn.plyr.io/x.x.x/plyr.js"
@@ -385,6 +407,6 @@ if (Object.keys(aws).includes('cdn') && Object.keys(aws).includes('demo')) {
 
     // Do everything
     gulp.task('publish', () => {
-        run(tasks.clean, tasks.js, tasks.sass, tasks.sprite, 'cdn', 'demo');
+        run('version', tasks.clean, tasks.js, tasks.sass, tasks.sprite, 'cdn', 'demo');
     });
 }
