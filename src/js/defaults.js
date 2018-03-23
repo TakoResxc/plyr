@@ -141,7 +141,7 @@ const defaults = {
         'settings',
         'pip',
         'airplay',
-        'cast',
+        'googlecast',
         'fullscreen',
     ],
     settings: [
@@ -169,7 +169,7 @@ const defaults = {
         disableCaptions: 'Disable captions',
         enterFullscreen: 'Enter fullscreen',
         exitFullscreen: 'Exit fullscreen',
-        toggleCast: 'Google Cast',
+        enableGoogleCast: 'Google Cast',
         frameTitle: 'Player for {title}',
         captions: 'Captions',
         settings: 'Settings',
@@ -212,7 +212,7 @@ const defaults = {
         fullscreen: null,
         pip: null,
         airplay: null,
-        cast: null,
+        googlecast: null,
         speed: null,
         quality: null,
         loop: null,
@@ -292,7 +292,7 @@ const defaults = {
             fullscreen: '[data-plyr="fullscreen"]',
             pip: '[data-plyr="pip"]',
             airplay: '[data-plyr="airplay"]',
-            cast: '[data-plyr="cast"]',
+            googlecast: '[data-plyr="googlecast"]',
             settings: '[data-plyr="settings"]',
             loop: '[data-plyr="loop"]',
         },
@@ -313,7 +313,7 @@ const defaults = {
         },
         progress: '.plyr__progress',
         captions: '.plyr__captions',
-        cast: '.plyr__cast',
+        googlecast: '.plyr__googlecast',
         menu: {
             quality: '.js-plyr__menu__list--quality',
         },
@@ -362,9 +362,9 @@ const defaults = {
             active: 'plyr--airplay-active',
         },
         tabFocus: 'plyr__tab-focus',
-        cast: {
-            enabled: 'plyr--cast-enabled',
-            active: 'plyr--cast-active',
+        googlecast: {
+            enabled: 'plyr--googlecast-enabled',
+            active: 'plyr--googlecast-active',
         },
     },
 

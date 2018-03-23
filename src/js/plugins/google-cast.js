@@ -1,23 +1,24 @@
-import utils from './utils';
+import utils from './../utils';
+import Console from './../console';
 
 const googleCast = {
     setup(config) {
         googleCast.defaults = {};
         googleCast.config = {};
 
+        googleCast.debug = new Console(true);
         // TODO: Get cast logs under a separate namespace?
-        googleCast.log = () => {};
 
         // Inject the container
-        if (!utils.is.htmlElement(this.elements.cast)) {
-            this.elements.cast = utils.createElement(
+        if (!utils.is.element(this.elements.googlecast)) {
+            this.elements.googlecast = utils.createElement(
                 'div',
-                utils.getAttributesFromSelector(this.config.selectors.cast)
+                utils.getAttributesFromSelector(this.config.selectors.googlecast)
             );
-            utils.insertAfter(this.elements.cast, this.elements.wrapper);
+            utils.insertAfter(this.elements.googlecast, this.elements.wrapper);
         }
         // Set the class hook
-        utils.toggleClass(this.elements.container, this.config.classNames.cast.enabled, true);
+        utils.toggleClass(this.elements.container, this.config.classNames.googlecast.enabled, true);
 
         utils.loadScript('//www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1');
         // FIXME: There __has__ to be a better way to do this
@@ -51,7 +52,7 @@ const googleCast = {
                 window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
                 googleCast.sessionStateListener
             );
-        googleCast.log('Initialized google cast');
+        googleCast.debug.log('Initialized google cast');
     },
 
     getCurrentSession() {
@@ -70,14 +71,16 @@ const googleCast = {
     },
 
     onPlay() {
+      debugger
         const plyr = googleCast.getCurrentPlyr();
 
-        googleCast.log('Asking remote player to play');
+        googleCast.debug.log('Asking remote player to play');
         plyr.remotePlayerController.playOrPause();
     },
     onPause() {
+      debugger
         const plyr = googleCast.getCurrentPlyr();
-        googleCast.log('Asking remote player to pause');
+        googleCast.debug.log('Asking remote player to pause');
         plyr.remotePlayerController.playOrPause();
     },
     onReady() {
@@ -86,7 +89,8 @@ const googleCast = {
     },
 
     loadMedia(plyr) {
-        googleCast.log('load media called');
+      debugger
+        googleCast.debug.log('load media called');
         const session = googleCast.getCurrentSession();
         if (!session) {
             return;
@@ -94,12 +98,12 @@ const googleCast = {
 
         const defaults = {
             mediaInfo: {
-                source: plyr.src,
+                source: plyr.source,
                 type: 'video/mp4',
             },
             metadata: {
                 metadataType: window.chrome.cast.media.MetadataType.GENERIC,
-                title: plyr.src,
+                title: plyr.source,
                 images: [{}],
             },
             loadRequest: {
@@ -122,10 +126,10 @@ const googleCast = {
 
         session.loadMedia(loadRequest).then(
             () => {
-                googleCast.log('Successfully loaded media');
+                googleCast.debug.log('Successfully loaded media');
             },
             errorCode => {
-                googleCast.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
+                googleCast.debug.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
             }
         );
     },
@@ -142,7 +146,7 @@ const googleCast = {
         utils.on(plyr.media, 'pause', googleCast.onPause);
 
         plyr.on('ready', googleCast.onReady);
-        googleCast.log('Plyr bound');
+        googleCast.debug.log('Plyr bound');
     },
 
     unbindPlyr(plyr) {
@@ -189,14 +193,14 @@ const googleCast = {
     },
 
     castStateListener(data) {
-        googleCast.log(`Cast State Changed: ${JSON.stringify(data)}`);
+        googleCast.debug.log(`Cast State Changed: ${JSON.stringify(data)}`);
         const plyr = googleCast.getCurrentPlyr();
         const cs = window.cast.framework.CastState;
         let castEvent;
         switch (data.castState) {
             case cs.NO_DEVICES_AVAILABLE:
             case cs.NOT_CONNECTED:
-                googleCast.log('NOT CONNECTED');
+                googleCast.debug.log('NOT CONNECTED');
                 castEvent = 'castdisabled';
                 break;
             case cs.CONNECTING:
@@ -205,13 +209,13 @@ const googleCast = {
                 castEvent = 'castenabled';
                 break;
             default:
-                // googleCast.log(`Unknown cast state=${JSON.stringify(data.castState)}`);
+                // googleCast.debug.log(`Unknown cast state=${JSON.stringify(data.castState)}`);
                 break;
         }
         if (plyr && castEvent) {
             const castActive = castEvent === 'castenabled';
             // Add class hook
-            utils.toggleClass(plyr.elements.container, plyr.config.classNames.cast.active, castActive);
+            utils.toggleClass(plyr.elements.container, plyr.config.classNames.googlecast.active, castActive);
             utils.dispatchEvent.call(plyr, plyr.elements.container, castEvent, true);
         }
     },
@@ -243,9 +247,11 @@ const googleCast = {
                 // plyr.log(`Unknown session state=${JSON.stringify(data.sessionState)}`);
                 break;
         }
+        googleCast.debug.log(`sessionStateListener: state=${data.sessionState}`)
     },
 
     requestSession(plyr) {
+      debugger
         // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
@@ -294,23 +300,23 @@ const googleCast = {
     // Display cast container and button (for initialization)
     show() {
         // If there's no cast toggle, bail
-        if (!this.elements.buttons.cast) {
+        if (!this.elements.buttons.googlecast) {
             return;
         }
 
         // Try to load the value from storage
-        let active = this.storage.cast;
+        let active = this.storage.googlecast;
 
         // Otherwise fall back to the default config
         if (!utils.is.boolean(active)) {
-            ({ active } = this.cast);
+            ({ active } = this.googlecast);
         } else {
-            this.cast.active = active;
+            this.googlecast.active = active;
         }
 
         if (active) {
-            utils.toggleClass(this.elements.container, this.config.classNames.cast.active, true);
-            utils.toggleState(this.elements.buttons.cast, true);
+            utils.toggleClass(this.elements.container, this.config.classNames.googlecast.active, true);
+            utils.toggleState(this.elements.buttons.googlecast, true);
         }
     },
 };

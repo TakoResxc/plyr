@@ -186,10 +186,12 @@ const controls = {
                 label = 'play';
                 icon = 'play';
                 break;
-            case 'cast':
-                labelKey = 'toggleCast';
-                iconDefault = 'cast-off';
-                iconToggled = 'cast-on';
+            case 'googlecast':
+                toggle = true;
+                label = 'enableGoogleCast';
+                labelPressed = 'disableGoogleCast';
+                icon = 'googlecast-off';
+                iconPressed = 'googlecast-on';
                 break;
             default:
                 label = type;
@@ -1019,8 +1021,8 @@ const controls = {
         }
 
         // Google cast button
-        if (this.config.controls.includes('cast')) {
-            container.appendChild(controls.createButton.call(this, 'cast'));
+        if (this.config.controls.includes('googlecast')) {
+            container.appendChild(controls.createButton.call(this, 'googlecast'));
         }
 
         // Settings button / menu

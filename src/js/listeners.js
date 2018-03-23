@@ -437,9 +437,9 @@ class Listeners {
         );
 
         // Google cast
-        utils.on(this.elements.buttons.cast, 'click', event =>
-            proxy(event, 'cast', () => {
-                this.googleCast();
+        utils.on(this.player.elements.buttons.googlecast, 'click', event =>
+            proxy(event, 'googlecast', () => {
+                this.player.googleCast();
             })
         );
 

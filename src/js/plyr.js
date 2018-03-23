@@ -935,10 +935,9 @@ class Plyr {
      * Trigger google cast dialog
      */
     googleCast() {
-        if (!support.cast) {
-          return this;
+        if (!support.googlecast) {
+            return;
         }
-
         googleCast.requestSession(this);
     }
 
