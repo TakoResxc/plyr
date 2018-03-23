@@ -89,7 +89,16 @@ const googleCast = {
         const plyr = googleCast.getCurrentPlyr();
         googleCast.loadMedia(plyr);
     },
-
+    onVolumeChange() {
+        const plyr = googleCast.getCurrentPlyr();
+        // We need to specially handle the case where plyr is muted
+        let volume = plyr.volume;
+        if (plyr.muted) {
+            volume = 0;
+        }
+        plyr.remotePlayer.volumeLevel = volume;
+        plyr.remotePlayerController.setVolumeLevel();
+    },
     loadMedia(plyr) {
         googleCast.debug.log('load media called');
         const session = googleCast.getCurrentSession();
@@ -151,6 +160,7 @@ const googleCast = {
         utils.on(plyr.media, 'play', googleCast.onPlay);
         utils.on(plyr.media, 'pause', googleCast.onPause);
         utils.on(plyr.media, 'seeked', googleCast.onSeek);
+        utils.on(plyr.media, 'volumechange', googleCast.onVolumeChange);
 
         plyr.on('ready', googleCast.onReady);
         googleCast.debug.log('Plyr bound');
