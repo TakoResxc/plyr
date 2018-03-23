@@ -66,17 +66,23 @@ const googleCast = {
     onPlay() {
         const plyr = googleCast.getCurrentPlyr();
         googleCast.debug.log('Asking remote player to play');
+        // Seek before playing?
+        // googleCast.onSeek();
         plyr.remotePlayerController.playOrPause();
     },
     onPause() {
         const plyr = googleCast.getCurrentPlyr();
         googleCast.debug.log('Asking remote player to pause');
         plyr.remotePlayerController.playOrPause();
+        // Seek after pause
+        googleCast.onSeek();
     },
-    onSeek(time) {
+    onSeek() {
         const plyr = googleCast.getCurrentPlyr();
-        googleCast.debug.log(`Asking remote player to seek to ${time}`);
-        plyr.remotePlayerController.seek(time);
+        const timestamp = plyr.currentTime;
+        plyr.remotePlayer.currentTime = timestamp
+        plyr.remotePlayerController.seek();
+        googleCast.debug.log(`Asking remote player to seek to ${timestamp}`);
     },
     onReady() {
         googleCast.debug.log('Running googleCast.onReady()')
@@ -144,7 +150,7 @@ const googleCast = {
 
         utils.on(plyr.media, 'play', googleCast.onPlay);
         utils.on(plyr.media, 'pause', googleCast.onPause);
-        utils.on(plyr.media, 'seek', googleCast.onSeek);
+        utils.on(plyr.media, 'seeked', googleCast.onSeek);
 
         plyr.on('ready', googleCast.onReady);
         googleCast.debug.log('Plyr bound');
@@ -237,7 +243,6 @@ const googleCast = {
             case ss.SESSION_STARTED:
             case ss.SESSION_RESUMED:
                 // run on ready
-                debugger
                 googleCast.onReady();
                 break;
             case ss.SESSION_START_FAILED:
@@ -253,7 +258,6 @@ const googleCast = {
     },
 
     requestSession(plyr) {
-        debugger
         // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
