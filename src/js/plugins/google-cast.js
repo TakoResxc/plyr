@@ -6,6 +6,14 @@ const googleCast = {
         googleCast.defaults = {};
         googleCast.config = {};
 
+        googleCast.events = {
+            'ready': googleCast.onReady,
+            'play': googleCast.onPlay,
+            'pause': googleCast.onPause,
+            'seeked': googleCast.onSeek,
+            'volumechange': googleCast.onVolumeChange,
+        };
+
         googleCast.debug = new Console(true);
         // TODO: Get cast logs under a separate namespace?
 
@@ -157,21 +165,21 @@ const googleCast = {
         plyr.remotePlayer = plyr.remotePlayer || new window.cast.framework.RemotePlayer();
         plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
-        utils.on(plyr.media, 'play', googleCast.onPlay);
-        utils.on(plyr.media, 'pause', googleCast.onPause);
-        utils.on(plyr.media, 'seeked', googleCast.onSeek);
-        utils.on(plyr.media, 'volumechange', googleCast.onVolumeChange);
-
-        plyr.on('ready', googleCast.onReady);
+        // Iterate over events and add all listeners
+        Object.keys(googleCast.events).forEach((evt) => {
+            const fn = googleCast.events[evt];
+            utils.on(plyr.media, evt, fn);
+        });
         googleCast.debug.log('Plyr bound');
     },
 
     unbindPlyr(plyr) {
         const currentPlyr = googleCast.currentPlyr;
         if (currentPlyr === plyr) {
-            utils.off(currentPlyr.media, 'play', googleCast.onPlay);
-            utils.off(currentPlyr.media, 'pause', googleCast.onPause);
-            utils.off(currentPlyr.media, 'ready', googleCast.onReady);
+            Object.keys(googleCast.events).forEach((evt) => {
+                const fn = googleCast.events[evt];
+                utils.off(plyr.media, evt, fn);
+            });
         }
         googleCast.currentPlyr = undefined;
         googleCast.currentPlyrOptions = undefined;
