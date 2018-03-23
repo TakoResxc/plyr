@@ -60,36 +60,31 @@ const googleCast = {
     },
 
     getCurrentPlyr() {
-        const cc = window.cast.framework.CastContext.getInstance();
-        let plyr;
-
-        if (!cc) {
-            return undefined;
-        }
-        plyr = cc.plyr;
-        return plyr;
+        return googleCast.currentPlyr
     },
 
     onPlay() {
-      debugger
         const plyr = googleCast.getCurrentPlyr();
-
         googleCast.debug.log('Asking remote player to play');
         plyr.remotePlayerController.playOrPause();
     },
     onPause() {
-      debugger
         const plyr = googleCast.getCurrentPlyr();
         googleCast.debug.log('Asking remote player to pause');
         plyr.remotePlayerController.playOrPause();
     },
+    onSeek(time) {
+        const plyr = googleCast.getCurrentPlyr();
+        googleCast.debug.log(`Asking remote player to seek to ${time}`);
+        plyr.remotePlayerController.seek(time);
+    },
     onReady() {
+        googleCast.debug.log('Running googleCast.onReady()')
         const plyr = googleCast.getCurrentPlyr();
         googleCast.loadMedia(plyr);
     },
 
     loadMedia(plyr) {
-      debugger
         googleCast.debug.log('load media called');
         const session = googleCast.getCurrentSession();
         if (!session) {
@@ -127,37 +122,43 @@ const googleCast = {
         session.loadMedia(loadRequest).then(
             () => {
                 googleCast.debug.log('Successfully loaded media');
+                googleCast.bindPlyr(plyr)
             },
             errorCode => {
                 googleCast.debug.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
             }
         );
     },
-
+    setCurrentPlyr(plyr) {
+        googleCast.currentPlyr = plyr
+    },
     bindPlyr(plyr, options) {
-        const cc = window.cast.framework.CastContext.getInstance();
-        cc.plyr = plyr;
-        cc.options = options;
+        if (googleCast.currentPlyr !== plyr) {
+            googleCast.debug.warn('Warning! Current plyr !==  plyr in bindPlyr()')
+            googleCast.currentPlyr = plyr
+        }
+        googleCast.currentPlyrOptions = options;
 
-        plyr.remotePlayer = new window.cast.framework.RemotePlayer();
-        plyr.remotePlayerController = new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
+        plyr.remotePlayer = plyr.remotePlayer || new window.cast.framework.RemotePlayer();
+        plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
         utils.on(plyr.media, 'play', googleCast.onPlay);
         utils.on(plyr.media, 'pause', googleCast.onPause);
+        utils.on(plyr.media, 'seek', googleCast.onSeek);
 
         plyr.on('ready', googleCast.onReady);
         googleCast.debug.log('Plyr bound');
     },
 
     unbindPlyr(plyr) {
-        const cc = window.cast.framework.CastContext.getInstance();
-        const currentPlyr = cc.plyr;
+        const currentPlyr = googleCast.currentPlyr;
         if (currentPlyr === plyr) {
             utils.off(currentPlyr.media, 'play', googleCast.onPlay);
             utils.off(currentPlyr.media, 'pause', googleCast.onPause);
             utils.off(currentPlyr.media, 'ready', googleCast.onReady);
         }
-        cc.plyr = undefined;
+        googleCast.currentPlyr = undefined;
+        googleCast.currentPlyrOptions = undefined;
     },
 
     getErrorMessage(error) {
@@ -236,6 +237,7 @@ const googleCast = {
             case ss.SESSION_STARTED:
             case ss.SESSION_RESUMED:
                 // run on ready
+                debugger
                 googleCast.onReady();
                 break;
             case ss.SESSION_START_FAILED:
@@ -247,11 +249,11 @@ const googleCast = {
                 // plyr.log(`Unknown session state=${JSON.stringify(data.sessionState)}`);
                 break;
         }
-        googleCast.debug.log(`sessionStateListener: state=${data.sessionState}`)
+        googleCast.debug.log(`sessionStateListener: state=${data.sessionState}`);
     },
 
     requestSession(plyr) {
-      debugger
+        debugger
         // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
@@ -261,7 +263,7 @@ const googleCast = {
             googleCast.unbindPlyr(existingPlyr);
         }
         if (existingPlyr !== plyr) {
-            googleCast.bindPlyr(plyr);
+            googleCast.setCurrentPlyr(plyr);
             wasPlyrAlreadyBound = false;
         }
 
