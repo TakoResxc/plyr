@@ -106,6 +106,7 @@ const googleCast = {
             return;
         }
 
+        // TODO: We need to be able to override the defaults
         const defaults = {
             mediaInfo: {
                 source: plyr.source,
@@ -121,8 +122,7 @@ const googleCast = {
                 currentTime: plyr.currentTime,
             },
         };
-        let options = window.cast.framework.CastContext.getInstance().options;
-        options = utils.extend({}, defaults, options);
+        const options = utils.extend({}, defaults);
 
         const mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
         mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
