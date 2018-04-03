@@ -294,7 +294,8 @@ const youtube = {
                     });
 
                     // Get available speeds
-                    player.options.speed = instance.getAvailablePlaybackRates();
+                    const options = instance.getAvailablePlaybackRates();
+                    controls.setSpeedMenu.call(player, options);
 
                     // Set the tabindex to avoid focus entering iframe
                     if (player.supported.ui) {
@@ -338,8 +339,6 @@ const youtube = {
 
                     // Reset timer
                     clearInterval(player.timers.playing);
-
-                    console.warn(event.data);
 
                     // Handle events
                     // -1   Unstarted

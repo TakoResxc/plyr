@@ -7,6 +7,7 @@
 /* global google */
 
 import utils from '../utils';
+import i18n from '../i18n';
 
 class Ads {
     /**
@@ -178,7 +179,7 @@ class Ads {
 
         const update = () => {
             const time = utils.formatTime(Math.max(this.manager.getRemainingTime(), 0));
-            const label = `${this.player.config.i18n.advertisement} - ${time}`;
+            const label = `${i18n.get('advertisement', this.player.config)} - ${time}`;
             this.elements.container.setAttribute('data-badge-text', label);
         };
 
@@ -205,21 +206,23 @@ class Ads {
         this.cuePoints = this.manager.getCuePoints();
 
         // Add advertisement cue's within the time line if available
-        this.cuePoints.forEach(cuePoint => {
-            if (cuePoint !== 0 && cuePoint !== -1 && cuePoint < this.player.duration) {
-                const seekElement = this.player.elements.progress;
+        if (!utils.is.empty(this.cuePoints)) {
+            this.cuePoints.forEach(cuePoint => {
+                if (cuePoint !== 0 && cuePoint !== -1 && cuePoint < this.player.duration) {
+                    const seekElement = this.player.elements.progress;
 
-                if (seekElement) {
-                    const cuePercentage = 100 / this.player.duration * cuePoint;
-                    const cue = utils.createElement('span', {
-                        class: this.player.config.classNames.cues,
-                    });
+                    if (utils.is.element(seekElement)) {
+                        const cuePercentage = 100 / this.player.duration * cuePoint;
+                        const cue = utils.createElement('span', {
+                            class: this.player.config.classNames.cues,
+                        });
 
-                    cue.style.left = `${cuePercentage.toString()}%`;
-                    seekElement.appendChild(cue);
+                        cue.style.left = `${cuePercentage.toString()}%`;
+                        seekElement.appendChild(cue);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Get skippable state
         // TODO: Skip button
@@ -384,6 +387,10 @@ class Ads {
         this.player.on('seeked', () => {
             const seekedTime = this.player.currentTime;
 
+            if (utils.is.empty(this.cuePoints)) {
+                return;
+            }
+
             this.cuePoints.forEach((cuePoint, index) => {
                 if (time < cuePoint && cuePoint < seekedTime) {
                     this.manager.discardAdBreak();
@@ -395,7 +402,9 @@ class Ads {
         // Listen to the resizing of the window. And resize ad accordingly
         // TODO: eventually implement ResizeObserver
         window.addEventListener('resize', () => {
-            this.manager.resize(container.offsetWidth, container.offsetHeight, google.ima.ViewMode.NORMAL);
+            if (this.manager) {
+                this.manager.resize(container.offsetWidth, container.offsetHeight, google.ima.ViewMode.NORMAL);
+            }
         });
     }
 

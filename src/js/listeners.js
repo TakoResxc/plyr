@@ -17,6 +17,7 @@ class Listeners {
 
         this.handleKey = this.handleKey.bind(this);
         this.toggleMenu = this.toggleMenu.bind(this);
+        this.firstTouch = this.firstTouch.bind(this);
     }
 
     // Handle key presses
@@ -187,6 +188,17 @@ class Listeners {
         controls.toggleMenu.call(this.player, event);
     }
 
+    // Device is touch enabled
+    firstTouch() {
+        this.player.touch = true;
+
+        // Add touch class
+        utils.toggleClass(this.player.elements.container, this.player.config.classNames.isTouch, true);
+
+        // Clean up
+        utils.off(document.body, 'touchstart', this.firstTouch);
+    }
+
     // Global window & document listeners
     global(toggle = true) {
         // Keyboard shortcuts
@@ -196,6 +208,9 @@ class Listeners {
 
         // Click anywhere closes menu
         utils.toggleListener(document.body, 'click', this.toggleMenu, toggle);
+
+        // Detect touch by events
+        utils.on(document.body, 'touchstart', this.firstTouch);
     }
 
     // Container listeners
@@ -263,17 +278,27 @@ class Listeners {
         // Check for buffer progress
         utils.on(this.player.media, 'progress playing', event => ui.updateProgress.call(this.player, event));
 
-        // Handle native mute
+        // Handle volume changes
         utils.on(this.player.media, 'volumechange', event => ui.updateVolume.call(this.player, event));
 
-        // Handle native play/pause
+        // Handle play/pause
         utils.on(this.player.media, 'playing play pause ended emptied', event => ui.checkPlaying.call(this.player, event));
 
-        // Loading
+        // Loading state
         utils.on(this.player.media, 'waiting canplay seeked playing', event => ui.checkLoading.call(this.player, event));
 
         // Check if media failed to load
         // utils.on(this.player.media, 'play', event => ui.checkFailed.call(this.player, event));
+
+        // If autoplay, then load advertisement if required
+        // TODO: Show some sort of loading state while the ad manager loads else there's a delay before ad shows
+        utils.on(this.player.media, 'playing', () => {
+            // If ads are enabled, wait for them first
+            if (this.player.ads.enabled && !this.player.ads.initialized) {
+                // Wait for manager response
+                this.player.ads.managerPromise.then(() => this.player.ads.play()).catch(() => this.player.play());
+            }
+        });
 
         // Click video
         if (this.player.supported.ui && this.player.config.clickToPlay && !this.player.isAudio) {
@@ -288,7 +313,7 @@ class Listeners {
             // On click play, pause ore restart
             utils.on(wrapper, 'click', () => {
                 // Touch devices will just show controls (if we're hiding controls)
-                if (this.player.config.hideControls && support.touch && !this.player.paused) {
+                if (this.player.config.hideControls && this.player.touch && !this.player.paused) {
                     return;
                 }
 
@@ -379,62 +404,55 @@ class Listeners {
         // IE doesn't support input event, so we fallback to change
         const inputEvent = browser.isIE ? 'change' : 'input';
 
-        // Trigger custom and default handlers
-        const proxy = (event, handlerKey, defaultHandler) => {
-            const customHandler = this.player.config.listeners[handlerKey];
+        // Run default and custom handlers
+        const proxy = (event, defaultHandler, customHandlerKey) => {
+            const customHandler = this.player.config.listeners[customHandlerKey];
+            const hasCustomHandler = utils.is.function(customHandler);
+            let returned = true;
 
             // Execute custom handler
-            if (utils.is.function(customHandler)) {
-                customHandler.call(this.player, event);
+            if (hasCustomHandler) {
+                returned = customHandler.call(this.player, event);
             }
 
             // Only call default handler if not prevented in custom handler
-            if (!event.defaultPrevented && utils.is.function(defaultHandler)) {
+            if (returned && utils.is.function(defaultHandler)) {
                 defaultHandler.call(this.player, event);
             }
         };
 
+        // Trigger custom and default handlers
+        const on = (element, type, defaultHandler, customHandlerKey, passive = true) => {
+            const customHandler = this.player.config.listeners[customHandlerKey];
+            const hasCustomHandler = utils.is.function(customHandler);
+
+            utils.on(element, type, event => proxy(event, defaultHandler, customHandlerKey), passive && !hasCustomHandler);
+        };
+
         // Play/pause toggle
-        utils.on(this.player.elements.buttons.play, 'click', event =>
-            proxy(event, 'play', () => {
-                this.player.togglePlay();
-            }),
-        );
+        on(this.player.elements.buttons.play, 'click', this.player.togglePlay, 'play');
 
         // Pause
-        utils.on(this.player.elements.buttons.restart, 'click', event =>
-            proxy(event, 'restart', () => {
-                this.player.restart();
-            }),
-        );
+        on(this.player.elements.buttons.restart, 'click', this.player.restart, 'restart');
 
         // Rewind
-        utils.on(this.player.elements.buttons.rewind, 'click', event =>
-            proxy(event, 'rewind', () => {
-                this.player.rewind();
-            }),
-        );
+        on(this.player.elements.buttons.rewind, 'click', this.player.rewind, 'rewind');
 
         // Rewind
-        utils.on(this.player.elements.buttons.forward, 'click', event =>
-            proxy(event, 'forward', () => {
-                this.player.forward();
-            }),
-        );
+        on(this.player.elements.buttons.fastForward, 'click', this.player.forward, 'fastForward');
 
         // Mute toggle
-        utils.on(this.player.elements.buttons.mute, 'click', event =>
-            proxy(event, 'mute', () => {
+        on(
+            this.player.elements.buttons.mute,
+            'click',
+            () => {
                 this.player.muted = !this.player.muted;
-            }),
+            },
+            'mute',
         );
 
         // Captions toggle
-        utils.on(this.player.elements.buttons.captions, 'click', event =>
-            proxy(event, 'captions', () => {
-                this.player.toggleCaptions();
-            }),
-        );
+        on(this.player.elements.buttons.captions, 'click', this.player.toggleCaptions);
 
         // Google cast
         utils.on(this.player.elements.buttons.googlecast, 'click', event =>
@@ -444,64 +462,81 @@ class Listeners {
         );
 
         // Fullscreen toggle
-        utils.on(this.player.elements.buttons.fullscreen, 'click', event =>
-            proxy(event, 'fullscreen', () => {
+        on(
+            this.player.elements.buttons.fullscreen,
+            'click',
+            () => {
                 this.player.fullscreen.toggle();
-            }),
+            },
+            'fullscreen',
         );
 
         // Picture-in-Picture
-        utils.on(this.player.elements.buttons.pip, 'click', event =>
-            proxy(event, 'pip', () => {
+        on(
+            this.player.elements.buttons.pip,
+            'click',
+            () => {
                 this.player.pip = 'toggle';
-            }),
+            },
+            'pip',
         );
 
         // Airplay
-        utils.on(this.player.elements.buttons.airplay, 'click', event =>
-            proxy(event, 'airplay', () => {
-                this.player.airplay();
-            }),
-        );
+        on(this.player.elements.buttons.airplay, 'click', this.player.airplay, 'airplay');
 
         // Settings menu
-        utils.on(this.player.elements.buttons.settings, 'click', event => {
+        on(this.player.elements.buttons.settings, 'click', event => {
             controls.toggleMenu.call(this.player, event);
         });
 
         // Settings menu
-        utils.on(this.player.elements.settings.form, 'click', event => {
+        on(this.player.elements.settings.form, 'click', event => {
             event.stopPropagation();
 
             // Settings menu items - use event delegation as items are added/removed
             if (utils.matches(event.target, this.player.config.selectors.inputs.language)) {
-                proxy(event, 'language', () => {
-                    this.player.language = event.target.value;
-                });
+                proxy(
+                    event,
+                    () => {
+                        this.player.language = event.target.value;
+                    },
+                    'language',
+                );
             } else if (utils.matches(event.target, this.player.config.selectors.inputs.quality)) {
-                proxy(event, 'quality', () => {
-                    this.player.quality = event.target.value;
-                });
+                proxy(
+                    event,
+                    () => {
+                        this.player.quality = event.target.value;
+                    },
+                    'quality',
+                );
             } else if (utils.matches(event.target, this.player.config.selectors.inputs.speed)) {
-                proxy(event, 'speed', () => {
-                    this.player.speed = parseFloat(event.target.value);
-                });
+                proxy(
+                    event,
+                    () => {
+                        this.player.speed = parseFloat(event.target.value);
+                    },
+                    'speed',
+                );
             } else {
                 controls.showTab.call(this.player, event);
             }
         });
 
         // Seek
-        utils.on(this.player.elements.inputs.seek, inputEvent, event =>
-            proxy(event, 'seek', () => {
+        on(
+            this.player.elements.inputs.seek,
+            inputEvent,
+            event => {
                 this.player.currentTime = event.target.value / event.target.max * this.player.duration;
-            }),
+            },
+            'seek',
         );
 
         // Current time invert
         // Only if one time element is used for both currentTime and duration
         if (this.player.config.toggleInvert && !utils.is.element(this.player.elements.display.duration)) {
-            utils.on(this.player.elements.display.currentTime, 'click', () => {
+            on(this.player.elements.display.currentTime, 'click', () => {
                 // Do nothing if we're at the start
                 if (this.player.currentTime === 0) {
                     return;
@@ -513,31 +548,34 @@ class Listeners {
         }
 
         // Volume
-        utils.on(this.player.elements.inputs.volume, inputEvent, event =>
-            proxy(event, 'volume', () => {
+        on(
+            this.player.elements.inputs.volume,
+            inputEvent,
+            event => {
                 this.player.volume = event.target.value;
-            }),
+            },
+            'volume',
         );
 
         // Polyfill for lower fill in <input type="range"> for webkit
         if (browser.isWebkit) {
-            utils.on(utils.getElements.call(this.player, 'input[type="range"]'), 'input', event => {
+            on(utils.getElements.call(this.player, 'input[type="range"]'), 'input', event => {
                 controls.updateRangeFill.call(this.player, event.target);
             });
         }
 
         // Seek tooltip
-        utils.on(this.player.elements.progress, 'mouseenter mouseleave mousemove', event => controls.updateSeekTooltip.call(this.player, event));
+        on(this.player.elements.progress, 'mouseenter mouseleave mousemove', event => controls.updateSeekTooltip.call(this.player, event));
 
         // Toggle controls visibility based on mouse movement
         if (this.player.config.hideControls) {
             // Watch for cursor over controls so they don't hide when trying to interact
-            utils.on(this.player.elements.controls, 'mouseenter mouseleave', event => {
-                this.player.elements.controls.hover = event.type === 'mouseenter';
+            on(this.player.elements.controls, 'mouseenter mouseleave', event => {
+                this.player.elements.controls.hover = !this.player.touch && event.type === 'mouseenter';
             });
 
             // Watch for cursor over controls so they don't hide when trying to interact
-            utils.on(this.player.elements.controls, 'mousedown mouseup touchstart touchend touchcancel', event => {
+            on(this.player.elements.controls, 'mousedown mouseup touchstart touchend touchcancel', event => {
                 this.player.elements.controls.pressed = [
                     'mousedown',
                     'touchstart',
@@ -545,50 +583,50 @@ class Listeners {
             });
 
             // Focus in/out on controls
-            utils.on(this.player.elements.controls, 'focusin focusout', event => {
+            on(this.player.elements.controls, 'focusin focusout', event => {
                 this.player.toggleControls(event);
             });
         }
 
         // Mouse wheel for volume
-        utils.on(
+        on(
             this.player.elements.inputs.volume,
             'wheel',
-            event =>
-                proxy(event, 'volume', () => {
-                    // Detect "natural" scroll - suppored on OS X Safari only
-                    // Other browsers on OS X will be inverted until support improves
-                    const inverted = event.webkitDirectionInvertedFromDevice;
-                    const step = 1 / 50;
-                    let direction = 0;
+            event => {
+                // Detect "natural" scroll - suppored on OS X Safari only
+                // Other browsers on OS X will be inverted until support improves
+                const inverted = event.webkitDirectionInvertedFromDevice;
+                const step = 1 / 50;
+                let direction = 0;
 
-                    // Scroll down (or up on natural) to decrease
-                    if (event.deltaY < 0 || event.deltaX > 0) {
-                        if (inverted) {
-                            this.player.decreaseVolume(step);
-                            direction = -1;
-                        } else {
-                            this.player.increaseVolume(step);
-                            direction = 1;
-                        }
+                // Scroll down (or up on natural) to decrease
+                if (event.deltaY < 0 || event.deltaX > 0) {
+                    if (inverted) {
+                        this.player.decreaseVolume(step);
+                        direction = -1;
+                    } else {
+                        this.player.increaseVolume(step);
+                        direction = 1;
                     }
+                }
 
-                    // Scroll up (or down on natural) to increase
-                    if (event.deltaY > 0 || event.deltaX < 0) {
-                        if (inverted) {
-                            this.player.increaseVolume(step);
-                            direction = 1;
-                        } else {
-                            this.player.decreaseVolume(step);
-                            direction = -1;
-                        }
+                // Scroll up (or down on natural) to increase
+                if (event.deltaY > 0 || event.deltaX < 0) {
+                    if (inverted) {
+                        this.player.increaseVolume(step);
+                        direction = 1;
+                    } else {
+                        this.player.decreaseVolume(step);
+                        direction = -1;
                     }
+                }
 
-                    // Don't break page scrolling at max and min
-                    if ((direction === 1 && this.player.media.volume < 1) || (direction === -1 && this.player.media.volume > 0)) {
-                        event.preventDefault();
-                    }
-                }),
+                // Don't break page scrolling at max and min
+                if ((direction === 1 && this.player.media.volume < 1) || (direction === -1 && this.player.media.volume > 0)) {
+                    event.preventDefault();
+                }
+            },
+            'volume',
             false,
         );
     }

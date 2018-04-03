@@ -57,6 +57,23 @@ import Raven from 'raven-js';
                 tooltips: {
                     controls: true,
                 },
+                /* controls: [
+                    'play-large',
+                    'restart',
+                    'rewind',
+                    'play',
+                    'fast-forward',
+                    'progress',
+                    'current-time',
+                    'duration',
+                    'mute',
+                    'volume',
+                    'captions',
+                    'settings',
+                    'pip',
+                    'airplay',
+                    'fullscreen',
+                ], */
                 captions: {
                     active: true,
                 },

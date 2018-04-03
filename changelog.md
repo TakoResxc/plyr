@@ -1,4 +1,42 @@
-# v3.0.3
+## v3.0.11
+
+*   Muted and autoplay fixes
+*   Small bug fixes from Sentry logs
+
+## v3.0.10
+
+*   Docs fix
+*   Package upgrades
+
+## v3.0.9
+
+*   Demo fix
+*   Fix Vimeo regression
+
+## v3.0.8
+
+*   Vimeo hotfix for private videos
+
+## v3.0.7
+
+*   Fix for keyboard shortcut error with fast forward
+*   Fix for Vimeo trying to set playback rate when not allowed
+
+## v3.0.6
+
+*   Improved the logic for the custom handlers preventing default handlers
+
+## v3.0.5
+
+*   Removed console messages
+
+## v3.0.4
+
+*   Fixes for fullscreen not working inside iframes
+*   Fixes for custom handlers being able to prevent default
+*   Fixes for controls not hiding/showing correctly on Mobile Safari
+
+## v3.0.3
 
 *   Vimeo offset tweak (fixes #826)
 *   Fix for .stop() method (fixes #819)
@@ -9,11 +47,11 @@
 *   Fix fast-forward control (thanks @saadshahd)
 *   Fix the options link in the readme (thanks @DanielRuf)
 
-# v3.0.2
+## v3.0.2
 
 *   Fix for Safari not firing error events when trying to load blocked scripts
 
-# v3.0.1
+## v3.0.1
 
 *   Fix for trying to accessing local storage when it's blocked
 

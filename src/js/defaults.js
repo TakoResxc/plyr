@@ -56,7 +56,7 @@ const defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.0.3/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.0.11/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -132,7 +132,10 @@ const defaults = {
     // Default controls
     controls: [
         'play-large',
+        // 'restart',
+        // 'rewind',
         'play',
+        // 'fast-forward',
         'progress',
         'current-time',
         'mute',
@@ -156,7 +159,7 @@ const defaults = {
         rewind: 'Rewind {seektime} secs',
         play: 'Play',
         pause: 'Pause',
-        forward: 'Forward {seektime} secs',
+        fastForward: 'Forward {seektime} secs',
         seek: 'Seek',
         played: 'Played',
         buffered: 'Buffered',
@@ -180,7 +183,6 @@ const defaults = {
         end: 'End',
         all: 'All',
         reset: 'Reset',
-        none: 'None',
         disabled: 'Disabled',
         advertisement: 'Ad',
     },
@@ -205,7 +207,7 @@ const defaults = {
         pause: null,
         restart: null,
         rewind: null,
-        forward: null,
+        fastForward: null,
         mute: null,
         volume: null,
         captions: null,

@@ -117,9 +117,12 @@ class Fullscreen {
 
     // Determine if fullscreen is enabled
     get enabled() {
-        const fallback = this.player.config.fullscreen.fallback && !utils.inFrame();
-
-        return (Fullscreen.native || fallback) && this.player.config.fullscreen.enabled && this.player.supported.ui && this.player.isVideo;
+        return (
+            (Fullscreen.native || this.player.config.fullscreen.fallback) &&
+            this.player.config.fullscreen.enabled &&
+            this.player.supported.ui &&
+            this.player.isVideo
+        );
     }
 
     // Get active state
@@ -169,7 +172,7 @@ class Fullscreen {
         } else if (!Fullscreen.native) {
             toggleFallback.call(this, true);
         } else if (!this.prefix) {
-            this.target.requestFullScreen();
+            this.target.requestFullscreen();
         } else if (!utils.is.empty(this.prefix)) {
             this.target[`${this.prefix}Request${this.name}`]();
         }

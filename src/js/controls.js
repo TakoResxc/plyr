@@ -5,6 +5,7 @@
 import support from './support';
 import utils from './utils';
 import ui from './ui';
+import i18n from './i18n';
 import captions from './captions';
 
 // Sniff out the browser
@@ -74,7 +75,7 @@ const controls = {
 
     // Create hidden text label
     createLabel(type, attr) {
-        let text = this.config.i18n[type];
+        let text = i18n.get(type, this.config);
         const attributes = Object.assign({}, attr);
 
         switch (type) {
@@ -126,7 +127,7 @@ const controls = {
     createButton(buttonType, attr) {
         const button = utils.createElement('button');
         const attributes = Object.assign({}, attr);
-        let type = buttonType;
+        let type = utils.toCamelCase(buttonType);
 
         let toggle = false;
         let label;
@@ -147,7 +148,7 @@ const controls = {
         }
 
         // Large play button
-        switch (type) {
+        switch (buttonType) {
             case 'play':
                 toggle = true;
                 label = 'play';
@@ -195,7 +196,7 @@ const controls = {
                 break;
             default:
                 label = type;
-                icon = type;
+                icon = buttonType;
         }
 
         // Setup toggle icon and labels
@@ -210,7 +211,7 @@ const controls = {
 
             // Add aria attributes
             attributes['aria-pressed'] = false;
-            attributes['aria-label'] = this.config.i18n[label];
+            attributes['aria-label'] = i18n.get(label, this.config);
         } else {
             button.appendChild(controls.createIcon.call(this, icon));
             button.appendChild(controls.createLabel.call(this, label));
@@ -244,7 +245,7 @@ const controls = {
                 for: attributes.id,
                 class: this.config.classNames.hidden,
             },
-            this.config.i18n[type],
+            i18n.get(type, this.config),
         );
 
         // Seek input
@@ -297,11 +298,11 @@ const controls = {
             let suffix = '';
             switch (type) {
                 case 'played':
-                    suffix = this.config.i18n.played;
+                    suffix = i18n.get('played', this.config);
                     break;
 
                 case 'buffer':
-                    suffix = this.config.i18n.buffered;
+                    suffix = i18n.get('buffered', this.config);
                     break;
 
                 default:
@@ -328,7 +329,7 @@ const controls = {
                 {
                     class: this.config.classNames.hidden,
                 },
-                this.config.i18n[type],
+                i18n.get(type, this.config),
             ),
         );
 
@@ -389,6 +390,16 @@ const controls = {
         const clientRect = this.elements.inputs.seek.getBoundingClientRect();
         const visible = `${this.config.classNames.tooltip}--visible`;
 
+        const toggle = toggle => {
+            utils.toggleClass(this.elements.display.seekTooltip, visible, toggle);
+        };
+
+        // Hide on touch
+        if (this.touch) {
+            toggle(false);
+            return;
+        }
+
         // Determine percentage, if already visible
         if (utils.is.event(event)) {
             percent = 100 / clientRect.width * (event.pageX - clientRect.left);
@@ -417,7 +428,7 @@ const controls = {
             'mouseenter',
             'mouseleave',
         ].includes(event.type)) {
-            utils.toggleClass(this.elements.display.seekTooltip, visible, event.type === 'mouseenter');
+            toggle(event.type === 'mouseenter');
         }
     },
 
@@ -546,7 +557,7 @@ const controls = {
 
         switch (setting) {
             case 'captions':
-                value = this.captions.active ? this.captions.language : '';
+                value = this.captions.active ? this.captions.language : i18n.get('disabled', this.config);
                 break;
 
             default:
@@ -623,7 +634,7 @@ const controls = {
                     class: this.config.classNames.control,
                     'data-plyr-loop-action': option,
                 }),
-                this.config.i18n[option]
+                i18n.get(option, this.config)
             );
 
             if (['start', 'end'].includes(option)) {
@@ -643,11 +654,7 @@ const controls = {
             return null;
         }
 
-        if (!support.textTracks || !captions.getTracks.call(this).length) {
-            return this.config.i18n.none;
-        }
-
-        if (this.captions.active) {
+        if (support.textTracks && captions.getTracks.call(this).length && this.captions.active) {
             const currentTrack = captions.getCurrentTrack.call(this);
 
             if (utils.is.track(currentTrack)) {
@@ -655,7 +662,7 @@ const controls = {
             }
         }
 
-        return this.config.i18n.disabled;
+        return i18n.get('disabled', this.config);
     },
 
     // Set a list of available captions languages
@@ -682,10 +689,10 @@ const controls = {
             label: !utils.is.empty(track.label) ? track.label : track.language.toUpperCase(),
         }));
 
-        // Add the "None" option to turn off captions
+        // Add the "Disabled" option to turn off captions
         tracks.unshift({
             language: '',
-            label: this.config.i18n.none,
+            label: i18n.get('disabled', this.config),
         });
 
         // Generate options
@@ -705,7 +712,12 @@ const controls = {
     },
 
     // Set a list of available captions languages
-    setSpeedMenu() {
+    setSpeedMenu(options) {
+        // Do nothing if not selected
+        if (!this.config.controls.includes('settings') || !this.config.settings.includes('speed')) {
+            return;
+        }
+
         // Menu required
         if (!utils.is.element(this.elements.settings.panes.speed)) {
             return;
@@ -713,8 +725,8 @@ const controls = {
 
         const type = 'speed';
 
-        // Set the default speeds
-        if (!utils.is.array(this.options.speed) || !this.options.speed.length) {
+        // Set the speed options
+        if (!utils.is.array(options)) {
             this.options.speed = [
                 0.5,
                 0.75,
@@ -724,6 +736,8 @@ const controls = {
                 1.75,
                 2,
             ];
+        } else {
+            this.options.speed = options;
         }
 
         // Set options if passed and filter based on config
@@ -732,6 +746,9 @@ const controls = {
         // Toggle the pane and tab
         const toggle = !utils.is.empty(this.options.speed);
         controls.toggleTab.call(this, type, toggle);
+
+        // Check if we need to toggle the parent
+        controls.checkMenu.call(this);
 
         // If we're hiding, nothing more to do
         if (!toggle) {
@@ -752,6 +769,14 @@ const controls = {
         this.options.speed.forEach(speed => controls.createMenuItem.call(this, speed, list, type, controls.getLabel.call(this, 'speed', speed)));
 
         controls.updateSetting.call(this, type, list);
+    },
+
+    // Check if we need to hide/show the settings menu
+    checkMenu() {
+        const speedHidden = this.elements.settings.tabs.speed.getAttribute('hidden') !== null;
+        const languageHidden = this.elements.settings.tabs.captions.getAttribute('hidden') !== null;
+
+        utils.toggleHidden(this.elements.settings.menu, speedHidden && languageHidden);
     },
 
     // Show/hide menu
@@ -933,7 +958,7 @@ const controls = {
 
         // Fast forward button
         if (this.config.controls.includes('fast-forward')) {
-            container.appendChild(controls.createButton.call(this, 'fastForward'));
+            container.appendChild(controls.createButton.call(this, 'fast-forward'));
         }
 
         // Progress
@@ -1080,7 +1105,7 @@ const controls = {
                         'aria-controls': `plyr-settings-${data.id}-${type}`,
                         'aria-expanded': false,
                     }),
-                    this.config.i18n[type],
+                    i18n.get(type, this.config),
                 );
 
                 const value = utils.createElement('span', {
@@ -1120,7 +1145,7 @@ const controls = {
                         'aria-controls': `plyr-settings-${data.id}-home`,
                         'aria-expanded': false,
                     },
-                    this.config.i18n[type],
+                    i18n.get(type, this.config),
                 );
 
                 pane.appendChild(back);
@@ -1163,9 +1188,7 @@ const controls = {
 
         this.elements.controls = container;
 
-        if (this.config.controls.includes('settings') && this.config.settings.includes('speed')) {
-            controls.setSpeedMenu.call(this);
-        }
+        controls.setSpeedMenu.call(this);
 
         return container;
     },
