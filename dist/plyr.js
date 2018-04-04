@@ -77,7 +77,7 @@ var defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.0.10/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.0.11/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -452,7 +452,6 @@ function loadFile(path, callbackFn, args, numTries) {
       async = args.async,
       maxTries = (args.numRetries || 0) + 1,
       beforeCallbackFn = args.before || devnull,
-      pathStripped = path.replace(/^(css|img)!/, ''),
       isCss,
       e;
 
@@ -464,11 +463,7 @@ function loadFile(path, callbackFn, args, numTries) {
     // css
     e = doc.createElement('link');
     e.rel = 'stylesheet';
-    e.href = pathStripped; //.replace(/^css!/, '');  // remove "css!" prefix
-  } else if (/(^img!|\.(png|gif|jpg|svg)$)/.test(path)) {
-    // image
-    e = doc.createElement('img');
-    e.src = pathStripped;    
+    e.href = path.replace(/^css!/, '');  // remove "css!" prefix
   } else {
     // javascript
     e = doc.createElement('script');
