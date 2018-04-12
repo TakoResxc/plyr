@@ -12,7 +12,7 @@ const googleCast = {
             'pause': googleCast.onPause,
             'seeked': googleCast.onSeek,
             'volumechange': googleCast.onVolumeChange,
-            'loadedmetadata': googleCast.onSourceChange,
+            'qualityrequested': googleCast.onQualityChange,
         };
 
         googleCast.debug = new Console(true);
@@ -115,7 +115,7 @@ const googleCast = {
         plyr.remotePlayer.volumeLevel = volume;
         plyr.remotePlayerController.setVolumeLevel();
     },
-    onSourceChange() {
+    onQualityChange() {
         const plyr = googleCast.getCurrentPlyr();
         googleCast.loadMedia(plyr);
     },
@@ -134,11 +134,13 @@ const googleCast = {
             },
             metadata: {
                 metadataType: window.chrome.cast.media.MetadataType.GENERIC,
-                title: plyr.source,
-                images: [{}],
+                title: plyr.config.title || plyr.source,
+                images: [{
+                    url: plyr.poster,
+                }],
             },
             loadRequest: {
-                autoplay: false,
+                autoplay: plyr.playing,
                 currentTime: plyr.currentTime,
             },
         };
@@ -146,14 +148,11 @@ const googleCast = {
 
         const mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
         mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
-        mediaInfo.metadata.metadataType = options.metadata.metadataType;
-        mediaInfo.metadata.title = options.metadata.title;
-        mediaInfo.metadata.images = options.metadata.images;
+        Object.assign(mediaInfo.metadata, options.metadata);
 
         const loadRequest = new window.chrome.cast.media.LoadRequest(mediaInfo);
         loadRequest.autoplay = options.loadRequest.autoplay;
         loadRequest.currentTime = options.loadRequest.currentTime;
-
         session.loadMedia(loadRequest).then(
             () => {
                 googleCast.debug.log('Successfully loaded media');
