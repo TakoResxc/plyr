@@ -458,11 +458,7 @@ class Listeners {
         on(this.player.elements.buttons.captions, 'click', this.player.toggleCaptions);
 
         // Google cast
-        utils.on(this.player.elements.buttons.googlecast, 'click', event =>
-            proxy(event, 'googlecast', () => {
-                this.player.googleCast();
-            })
-        );
+        on(this.player.elements.buttons.googlecast, 'click', this.player.googleCast, 'googlecast');
 
         // Fullscreen toggle
         on(

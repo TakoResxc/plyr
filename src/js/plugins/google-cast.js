@@ -28,36 +28,43 @@ const googleCast = {
         // Set the class hook
         utils.toggleClass(this.elements.container, this.config.classNames.googlecast.enabled, true);
 
-        utils.loadScript('//www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1');
-        // FIXME: There __has__ to be a better way to do this
-        if (!window.chrome.cast || !window.chrome.cast.isAvailable) {
-            setTimeout(() => {
-                googleCast.defaults = {
-                    options: {
-                        receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-                        autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-                    },
-                };
-                const opts = utils.extend({}, googleCast.defaults, config);
-                googleCast.initializeCastApi(opts);
-            }, 1000);
+        if (!window.chrome.cast) {
+            utils.loadScript(this.config.urls.googleCast.api).then(() => {
+                // FIXME: There __has__ to be a better way to do this
+                // window.chrome.cast isn't immediately available when this function runs
+                const interval = setInterval(() => {
+                    if (window.chrome.cast.isAvailable) {
+                        clearInterval(interval);
+                        googleCast.defaults = {
+                            options: {
+                                receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+                            },
+                        };
+                        const opts = utils.extend({}, googleCast.defaults, config);
+                        googleCast.initializeCastApi(opts);
+                    }
+                }, 100);
+            });
         }
     },
 
     initializeCastApi(config) {
-        window.cast.framework.CastContext.getInstance().setOptions(config.options);
+        const { framework } = window.cast;
+        const { CastContext } = framework;
+        CastContext.getInstance().setOptions(config.options);
 
         // Set up event handlers
-        window.cast.framework.CastContext
+        CastContext
             .getInstance()
             .addEventListener(
-                window.cast.framework.CastContextEventType.CAST_STATE_CHANGED,
+                framework.CastContextEventType.CAST_STATE_CHANGED,
                 googleCast.castStateListener
             );
-        window.cast.framework.CastContext
+        CastContext
             .getInstance()
             .addEventListener(
-                window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+                framework.CastContextEventType.SESSION_STATE_CHANGED,
                 googleCast.sessionStateListener
             );
         googleCast.debug.log('Initialized google cast');
@@ -68,7 +75,7 @@ const googleCast = {
     },
 
     getCurrentPlyr() {
-        return googleCast.currentPlyr
+        return googleCast.currentPlyr;
     },
 
     onPlay() {
@@ -88,19 +95,19 @@ const googleCast = {
     onSeek() {
         const plyr = googleCast.getCurrentPlyr();
         const timestamp = plyr.currentTime;
-        plyr.remotePlayer.currentTime = timestamp
+        plyr.remotePlayer.currentTime = timestamp;
         plyr.remotePlayerController.seek();
         googleCast.debug.log(`Asking remote player to seek to ${timestamp}`);
     },
     onReady() {
-        googleCast.debug.log('Running googleCast.onReady()')
+        googleCast.debug.log('Running googleCast.onReady()');
         const plyr = googleCast.getCurrentPlyr();
         googleCast.loadMedia(plyr);
     },
     onVolumeChange() {
         const plyr = googleCast.getCurrentPlyr();
         // We need to specially handle the case where plyr is muted
-        let volume = plyr.volume;
+        let { volume } = plyr;
         if (plyr.muted) {
             volume = 0;
         }
@@ -145,7 +152,7 @@ const googleCast = {
         session.loadMedia(loadRequest).then(
             () => {
                 googleCast.debug.log('Successfully loaded media');
-                googleCast.bindPlyr(plyr)
+                googleCast.bindPlyr(plyr);
             },
             errorCode => {
                 googleCast.debug.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
@@ -153,12 +160,12 @@ const googleCast = {
         );
     },
     setCurrentPlyr(plyr) {
-        googleCast.currentPlyr = plyr
+        googleCast.currentPlyr = plyr;
     },
     bindPlyr(plyr, options) {
         if (googleCast.currentPlyr !== plyr) {
-            googleCast.debug.warn('Warning! Current plyr !==  plyr in bindPlyr()')
-            googleCast.currentPlyr = plyr
+            googleCast.debug.warn('Warning! Current plyr !==  plyr in bindPlyr()');
+            googleCast.currentPlyr = plyr;
         }
         googleCast.currentPlyrOptions = options;
 
@@ -174,7 +181,7 @@ const googleCast = {
     },
 
     unbindPlyr(plyr) {
-        const currentPlyr = googleCast.currentPlyr;
+        const { currentPlyr } = googleCast;
         if (currentPlyr === plyr) {
             Object.keys(googleCast.events).forEach((evt) => {
                 const fn = googleCast.events[evt];
@@ -186,7 +193,7 @@ const googleCast = {
     },
 
     getErrorMessage(error) {
-        const chrome = window.chrome;
+        const { chrome } = window;
         switch (error.code) {
             case chrome.cast.ErrorCode.API_NOT_INITIALIZED:
                 return `The API is not initialized.${error.description ? ` :${error.description}` : ''}`;

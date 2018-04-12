@@ -175,6 +175,7 @@ const defaults = {
         enterFullscreen: 'Enter fullscreen',
         exitFullscreen: 'Exit fullscreen',
         enableGoogleCast: 'Google Cast',
+        disableGoogleCast: 'Disable Cast',
         frameTitle: 'Player for {title}',
         captions: 'Captions',
         settings: 'Settings',
@@ -200,6 +201,9 @@ const defaults = {
         },
         googleIMA: {
             api: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js',
+        },
+        googleCast: {
+            api: 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1',
         },
     },
 
