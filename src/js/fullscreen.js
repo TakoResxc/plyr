@@ -68,12 +68,14 @@ class Fullscreen {
         });
 
         // Fullscreen toggle on double click
-        utils.on(this.player.elements.container, 'dblclick', () => {
+        utils.on(this.player.elements.container, 'dblclick', event => {
+            // Ignore double click in controls
+            if (this.player.elements.controls.contains(event.target)) {
+                return;
+            }
+
             this.toggle();
         });
-
-        // Prevent double click on controls bubbling up
-        utils.on(this.player.elements.controls, 'dblclick', event => event.stopPropagation());
 
         // Update the UI
         this.update();
@@ -191,7 +193,7 @@ class Fullscreen {
         } else if (!Fullscreen.native) {
             toggleFallback.call(this, false);
         } else if (!this.prefix) {
-            document.cancelFullScreen();
+            (document.cancelFullScreen || document.exitFullscreen).call(document);
         } else if (!utils.is.empty(this.prefix)) {
             const action = this.prefix === 'moz' ? 'Cancel' : 'Exit';
             document[`${this.prefix}${action}${this.name}`]();

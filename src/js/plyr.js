@@ -1,6 +1,6 @@
 // ==========================================================================
 // Plyr
-// plyr.js v3.0.11
+// plyr.js v3.1.0
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
@@ -59,7 +59,7 @@ class Plyr {
         this.config = utils.extend(
             {},
             defaults,
-            options,
+            options || {},
             (() => {
                 try {
                     return JSON.parse(this.media.getAttribute('data-plyr-config'));
@@ -672,27 +672,36 @@ class Plyr {
 
     /**
      * Set playback quality
-     * Currently YouTube only
-     * @param {string} input - Quality level
+     * Currently HTML5 & YouTube only
+     * @param {number} input - Quality level
      */
     set quality(input) {
         let quality = null;
 
-        if (utils.is.string(input)) {
-            quality = input;
+        if (!utils.is.empty(input)) {
+            quality = Number(input);
         }
 
-        if (!utils.is.string(quality)) {
+        if (!utils.is.number(quality) || quality === 0) {
             quality = this.storage.get('quality');
         }
 
-        if (!utils.is.string(quality)) {
+        if (!utils.is.number(quality)) {
             quality = this.config.quality.selected;
         }
 
-        if (!this.options.quality.includes(quality)) {
-            this.debug.warn(`Unsupported quality option (${quality})`);
+        if (!utils.is.number(quality)) {
+            quality = this.config.quality.default;
+        }
+
+        if (!this.options.quality.length) {
             return;
+        }
+
+        if (!this.options.quality.includes(quality)) {
+            const closest = utils.closest(this.options.quality, quality);
+            this.debug.warn(`Unsupported quality option: ${quality}, using ${closest} instead`);
+            quality = closest;
         }
 
         // Update config
@@ -838,7 +847,7 @@ class Plyr {
         }
 
         // If the method is called without parameter, toggle based on current value
-        const show = utils.is.boolean(input) ? input : this.elements.container.className.indexOf(this.config.classNames.captions.active) === -1;
+        const show = utils.is.boolean(input) ? input : !this.elements.container.classList.contains(this.config.classNames.captions.active);
 
         // Nothing to change...
         if (this.captions.active === show) {
