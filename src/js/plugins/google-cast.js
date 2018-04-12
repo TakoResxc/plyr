@@ -182,7 +182,7 @@ const googleCast = {
         // Iterate over events and add all listeners
         Object.keys(googleCast.events).forEach((evt) => {
             const fn = googleCast.events[evt];
-            utils.on(plyr.media, evt, fn);
+            plyr.on(evt, fn);
         });
         googleCast.debug.log('Plyr bound');
     },
@@ -192,7 +192,7 @@ const googleCast = {
         if (currentPlyr === plyr) {
             Object.keys(googleCast.events).forEach((evt) => {
                 const fn = googleCast.events[evt];
-                utils.off(plyr.media, evt, fn);
+                plyr.off(evt, fn);
             });
         }
         googleCast.currentPlyr = undefined;
