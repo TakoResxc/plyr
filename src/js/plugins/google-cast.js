@@ -12,6 +12,7 @@ const googleCast = {
             'pause': googleCast.onPause,
             'seeked': googleCast.onSeek,
             'volumechange': googleCast.onVolumeChange,
+            'loadedmetadata': googleCast.onSourceChange,
         };
 
         googleCast.debug = new Console(true);
@@ -114,6 +115,10 @@ const googleCast = {
         plyr.remotePlayer.volumeLevel = volume;
         plyr.remotePlayerController.setVolumeLevel();
     },
+    onSourceChange() {
+        const plyr = googleCast.getCurrentPlyr();
+        googleCast.loadMedia(plyr);
+    },
     loadMedia(plyr) {
         googleCast.debug.log('load media called');
         const session = googleCast.getCurrentSession();
@@ -169,8 +174,10 @@ const googleCast = {
         }
         googleCast.currentPlyrOptions = options;
 
-        plyr.remotePlayer = plyr.remotePlayer || new window.cast.framework.RemotePlayer();
-        plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
+        // TODO: Figure out if we should do plyr.remotePlayer = plyr.remotePlayer || new window.cast.framework.RemotePlayer()
+        plyr.remotePlayer = new window.cast.framework.RemotePlayer();
+        // TODO: Figure out if we should do plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
+        plyr.remotePlayerController = new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
         // Iterate over events and add all listeners
         Object.keys(googleCast.events).forEach((evt) => {
