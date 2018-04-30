@@ -1,6 +1,6 @@
 // ==========================================================================
 // Plyr
-// plyr.js v3.1.0
+// plyr.js v3.2.4
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
@@ -99,6 +99,7 @@ class Plyr {
         this.options = {
             speed: [],
             quality: [],
+            captions: [],
         };
 
         // Debugging
@@ -186,11 +187,16 @@ class Plyr {
                         if (truthy.includes(params.autoplay)) {
                             this.config.autoplay = true;
                         }
-                        if (truthy.includes(params.playsinline)) {
-                            this.config.inline = true;
-                        }
                         if (truthy.includes(params.loop)) {
                             this.config.loop.active = true;
+                        }
+
+                        // TODO: replace fullscreen.iosNative with this playsinline config option
+                        // YouTube requires the playsinline in the URL
+                        if (this.isYouTube) {
+                            this.config.playsinline = truthy.includes(params.playsinline);
+                        } else {
+                            this.config.playsinline = true;
                         }
                     }
                 } else {
@@ -225,7 +231,7 @@ class Plyr {
                     this.config.autoplay = true;
                 }
                 if (this.media.hasAttribute('playsinline')) {
-                    this.config.inline = true;
+                    this.config.playsinline = true;
                 }
                 if (this.media.hasAttribute('muted')) {
                     this.config.muted = true;
@@ -242,7 +248,7 @@ class Plyr {
         }
 
         // Check for support again but with type
-        this.supported = support.check(this.type, this.provider, this.config.inline);
+        this.supported = support.check(this.type, this.provider, this.config.playsinline);
 
         // If no support for even API, bail
         if (!this.supported.api) {
@@ -370,7 +376,7 @@ class Plyr {
      * Get playing state
      */
     get playing() {
-        return Boolean(!this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true));
+        return Boolean(this.ready && !this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true));
     }
 
     /**
@@ -448,7 +454,7 @@ class Plyr {
         }
 
         // Set
-        this.media.currentTime = parseFloat(targetTime.toFixed(4));
+        this.media.currentTime = targetTime;
 
         // Logging
         this.debug.log(`Seeking to ${this.currentTime} seconds`);
@@ -494,7 +500,7 @@ class Plyr {
      */
     get duration() {
         // Faux duration set via config
-        const fauxDuration = parseInt(this.config.duration, 10);
+        const fauxDuration = parseFloat(this.config.duration);
 
         // True duration
         const realDuration = this.media ? Number(this.media.duration) : 0;
@@ -841,8 +847,8 @@ class Plyr {
      * @param {boolean} input - Whether to enable captions
      */
     toggleCaptions(input) {
-        // If there's no full support, or there's no caption toggle
-        if (!this.supported.ui || !utils.is.element(this.elements.buttons.captions)) {
+        // If there's no full support
+        if (!this.supported.ui) {
             return;
         }
 
@@ -877,16 +883,28 @@ class Plyr {
             return;
         }
 
-        // Toggle captions based on input
-        this.toggleCaptions(!utils.is.empty(input));
-
         // If empty string is passed, assume disable captions
         if (utils.is.empty(input)) {
+            this.toggleCaptions(false);
             return;
         }
 
         // Normalize
         const language = input.toLowerCase();
+
+        // Check for support
+        if (!this.options.captions.includes(language)) {
+            this.debug.warn(`Unsupported language option: ${language}`);
+            return;
+        }
+
+        // Ensure captions are enabled
+        this.toggleCaptions(true);
+
+        // Enabled only
+        if (language === 'enabled') {
+            return;
+        }
 
         // If nothing to change, bail
         if (this.language === language) {
@@ -1070,8 +1088,8 @@ class Plyr {
                     utils.toggleClass(this.elements.controls, this.config.classNames.noTransition, false);
                 }
 
-                // Check if controls toggled
-                const toggled = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, true);
+                // Set hideControls class
+                const toggled = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, this.config.hideControls);
 
                 // Trigger event and close menu
                 if (toggled) {
