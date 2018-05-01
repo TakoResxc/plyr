@@ -31,6 +31,7 @@ const support = {
 
             case 'youtube:video':
             case 'vimeo:video':
+            case 'twitch:video':
                 api = true;
                 ui = support.rangeInput && (!browser.isIPhone || canPlayInline);
                 break;

@@ -147,7 +147,7 @@ class Plyr {
         }, 0);
 
         // Set media type based on tag or data attribute
-        // Supported: video, audio, vimeo, youtube
+        // Supported: video, audio, vimeo, youtube, twitch
         const type = this.media.tagName.toLowerCase();
 
         // Embed properties
@@ -320,13 +320,16 @@ class Plyr {
         return Boolean(this.provider === providers.html5);
     }
     get isEmbed() {
-        return Boolean(this.isYouTube || this.isVimeo);
+        return Boolean(this.isYouTube || this.isVimeo || this.isTwitch);
     }
     get isYouTube() {
         return Boolean(this.provider === providers.youtube);
     }
     get isVimeo() {
         return Boolean(this.provider === providers.vimeo);
+    }
+    get isTwitch() {
+        return Boolean(this.provider === providers.twitch);
     }
     get isVideo() {
         return Boolean(this.type === types.video);
@@ -475,6 +478,8 @@ class Plyr {
         if (utils.is.number(buffered)) {
             return buffered;
         }
+
+        // TODO: Add logic for Twitch
 
         // HTML5
         // TODO: Handle buffered chunks of the media
@@ -1218,7 +1223,10 @@ class Plyr {
                 setTimeout(done, 200);
 
                 break;
-
+            case 'twitch:video':
+                clearInterval(this.timers.playing);
+                done();
+                break;
             default:
                 break;
         }

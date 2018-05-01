@@ -69,6 +69,7 @@ const source = {
 
                     case 'youtube:video':
                     case 'vimeo:video':
+                    case 'twitch:video':
                         this.media = utils.createElement('div', {
                             src: input.sources[0].src,
                         });

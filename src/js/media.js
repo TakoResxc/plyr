@@ -7,6 +7,7 @@ import utils from './utils';
 import youtube from './plugins/youtube';
 import vimeo from './plugins/vimeo';
 import html5 from './html5';
+import twitch from './plugins/twitch';
 import ui from './ui';
 
 // Sniff out the browser
@@ -70,7 +71,9 @@ const media = {
                 case 'vimeo':
                     vimeo.setup.call(this);
                     break;
-
+                case 'twitch':
+                    twitch.setup.call(this);
+                    break;
                 default:
                     break;
             }

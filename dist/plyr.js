@@ -11,7 +11,8 @@
 var providers = {
     html5: 'html5',
     youtube: 'youtube',
-    vimeo: 'vimeo'
+    vimeo: 'vimeo',
+    twitch: 'twitch'
 };
 
 var types = {
@@ -186,6 +187,9 @@ var defaults = {
         },
         googleIMA: {
             api: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js'
+        },
+        twitch: {
+            api: 'https://player.twitch.tv/js/embed/v1.js'
         }
     },
 
@@ -454,7 +458,6 @@ function loadFile(path, callbackFn, args, numTries) {
       async = args.async,
       maxTries = (args.numRetries || 0) + 1,
       beforeCallbackFn = args.before || devnull,
-      pathStripped = path.replace(/^(css|img)!/, ''),
       isCss,
       e;
 
@@ -466,11 +469,7 @@ function loadFile(path, callbackFn, args, numTries) {
     // css
     e = doc.createElement('link');
     e.rel = 'stylesheet';
-    e.href = pathStripped; //.replace(/^css!/, '');  // remove "css!" prefix
-  } else if (/(^img!|\.(png|gif|jpg|svg)$)/.test(path)) {
-    // image
-    e = doc.createElement('img');
-    e.src = pathStripped;    
+    e.href = path.replace(/^css!/, '');  // remove "css!" prefix
   } else {
     // javascript
     e = doc.createElement('script');
@@ -1729,6 +1728,7 @@ var support = {
 
             case 'youtube:video':
             case 'vimeo:video':
+            case 'twitch:video':
                 api = true;
                 ui = support.rangeInput && (!browser.isIPhone || canPlayInline);
                 break;
@@ -6391,6 +6391,318 @@ var vimeo = {
 
 // ==========================================================================
 
+var twitch = {
+    setup: function setup() {
+        var _this = this;
+
+        // Add embed class for responsive
+        utils.toggleClass(this.elements.wrapper, this.config.classNames.embed, true);
+
+        // Set aspect ratio
+        twitch.setAspectRatio.call(this);
+
+        // Setup API
+        if (utils.is.object(window.Twitch) && utils.is.function(window.Twitch.Player)) {
+            twitch.ready.call(this);
+        } else {
+            // Load the API
+            utils.loadScript(this.config.urls.twitch.api).catch(function (error) {
+                _this.debug.warn('Twitch API failed to load', error);
+            });
+            // Load the API
+            utils.loadScript(this.config.urls.twitch.api);
+            var interval = window.setInterval(function () {
+                if (window.Twitch) {
+                    window.clearInterval(interval);
+                    twitch.ready.call(_this);
+                }
+            }, 100);
+        }
+    },
+
+
+    // API ready
+    ready: function ready() {
+        var player = this;
+
+        // Get the source URL or ID
+        var source = player.media.getAttribute('src');
+
+        // Get from <div> if needed
+        if (utils.is.empty(source)) {
+            source = player.media.getAttribute(this.config.attributes.embed.id);
+        }
+
+        var opts = {
+            autoplay: player.config.autoplay,
+            muted: player.config.muted
+        };
+
+        // Parse whether video, channel or collection
+        // then assign it to opts accordingly
+        var videoId = twitch.parseTwitchId(source);
+        opts[videoId.type] = videoId.src;
+
+        var id = utils.generateId(player.provider);
+
+        // This was taken from youtube.js
+        var container = utils.createElement('div', { id: id });
+        player.media = utils.replaceElement(container, player.media);
+
+        player.embed = new window.Twitch.Player(id, opts);
+
+        // Get the instance
+        var instance = player.embed;
+        instance.plyrProps = {
+            videoId: videoId
+        };
+
+        instance.addEventListener(window.Twitch.Player.READY, function () {
+            // TODO: Get the title
+
+            // Create a faux HTML5 API using the YouTube API
+            player.media.play = function () {
+                instance.play();
+            };
+
+            player.media.pause = function () {
+                instance.pause();
+            };
+
+            player.media.stop = function () {
+                player.pause();
+                player.currentTime = 0;
+            };
+
+            // XXX: instance.getDuration() is 0 for some reason
+            // Despite the API reporting that it's ready to be used
+            // Live streams thankfully respond with a duration of Infinity
+            // Therefore, we should be OK using the condition of !== 0 && !isNan()
+            player.media.duration = 0;
+            var durationInterval = setInterval(function () {
+                var duration = instance.getDuration();
+                if (duration !== 0 && !isNaN(duration)) {
+                    if (instance.plyrProps.type !== 'channel' && duration === Infinity) {
+                        // Only channels are allowed to have an infinite duration
+                        return;
+                    }
+                    clearInterval(durationInterval);
+                    player.media.duration = duration;
+                    player.media.paused = true;
+                    utils.dispatchEvent.call(player, player.media, 'durationchange');
+                }
+            }, 100);
+
+            // Seeking
+            player.media.currentTime = 0;
+            Object.defineProperty(player.media, 'currentTime', {
+                get: function get() {
+                    return Number(instance.getCurrentTime());
+                },
+                set: function set(time) {
+                    // Vimeo will automatically play on seek
+                    var paused = player.media.paused;
+
+                    // Set seeking flag
+
+                    player.media.seeking = true;
+
+                    // Trigger seeking
+                    utils.dispatchEvent.call(player, player.media, 'seeking');
+
+                    // Seek after events sent
+                    instance.seek(time);
+
+                    // Restore pause state
+                    if (paused) {
+                        player.pause();
+                    }
+                }
+            });
+
+            // Playback speed
+            // Twitch does not allow changing playbackRate
+            Object.defineProperty(player.media, 'playbackRate', {
+                get: function get() {
+                    return 1.0;
+                },
+                set: function set() {
+                    // XXX: Fail silently?
+                }
+            });
+
+            // Quality
+
+            // instance.getQualities is of the format
+            // [
+            //  {
+            //   "name": "720p60",
+            //   "group": "720p60",
+            //   "codecs": "avc1.4D402A,mp4a.40.2",
+            //   "bitrate": 6831378,
+            //   "width": 1920,
+            //   "height": 1080,
+            //   "framerate": 0,
+            //   "isDefault": true,
+            //   "bandwidth": 6831378
+            //  },
+            //  ...
+            // ]
+            // TODO: Should we calculate every time?
+            Object.defineProperty(player.media, 'quality', {
+                get: function get() {
+                    var qualities = instance.getQualities();
+                    // instance.getQuality() always returns 'group'
+                    var entry = qualities.filter(function (v) {
+                        return v.group === instance.getQuality();
+                    })[0];
+
+                    return entry && entry.height || undefined;
+                },
+                set: function set(input) {
+                    var qualities = instance.getQualities();
+                    var quality = input;
+                    // Find the entry whose 'height' equals quality
+                    var entry = qualities.filter(function (v) {
+                        return v.height === quality;
+                    })[0] || qualities[0];
+                    instance.setQuality(entry.group);
+                }
+            });
+
+            // Volume
+            var volume = player.config.volume;
+
+            Object.defineProperty(player.media, 'volume', {
+                get: function get() {
+                    return volume;
+                },
+                set: function set(input) {
+                    volume = input;
+                    instance.setVolume(volume);
+                    utils.dispatchEvent.call(player, player.media, 'volumechange');
+                }
+            });
+
+            // Muted
+            var muted = player.config.muted;
+
+            Object.defineProperty(player.media, 'muted', {
+                get: function get() {
+                    return muted;
+                },
+                set: function set(input) {
+                    var toggle = utils.is.boolean(input) ? input : muted;
+                    muted = toggle;
+                    instance.setMuted(muted);
+                    utils.dispatchEvent.call(player, player.media, 'volumechange');
+                }
+            });
+
+            var currentSrc = player.media.currentSrc;
+
+            currentSrc = source;
+            // Source
+            Object.defineProperty(player.media, 'currentSrc', {
+                get: function get() {
+                    return currentSrc;
+                }
+            });
+
+            // Ended
+            Object.defineProperty(player.media, 'ended', {
+                get: function get() {
+                    return player.currentTime === player.duration;
+                }
+            });
+
+            // Get available speeds
+            player.options.speed = [];
+
+            // Set the tabindex to avoid focus entering iframe
+            if (player.supported.ui) {
+                player.media.setAttribute('tabindex', -1);
+            }
+
+            utils.dispatchEvent.call(player, player.media, 'timeupdate');
+            utils.dispatchEvent.call(player, player.media, 'durationchange');
+
+            // Rebuild UI
+            setTimeout(function () {
+                return ui.build.call(player);
+            }, 50);
+
+            instance.addEventListener(window.Twitch.Player.ENDED, function () {
+                if (player.config.loop.active) {
+                    instance.seek(0);
+                    instance.play();
+                    return;
+                }
+                player.media.paused = true;
+                utils.dispatchEvent.call(player, player.media, 'ended');
+            });
+
+            instance.addEventListener(window.Twitch.Player.PLAY, function () {
+                player.media.paused = false;
+                player.media.seeking = false;
+
+                utils.dispatchEvent.call(player, player.media, 'play');
+                utils.dispatchEvent.call(player, player.media, 'playing');
+
+                // Poll to get playback progress
+                player.timers.playing = window.setInterval(function () {
+                    utils.dispatchEvent.call(player, player.media, 'timeupdate');
+                }, 50);
+
+                // Get quality
+                controls.setQualityMenu.call(player, instance.getQualities().map(function (v) {
+                    return v.height;
+                }));
+            });
+
+            instance.addEventListener(window.Twitch.Player.PAUSE, function () {
+                player.media.paused = true;
+                utils.dispatchEvent.call(player, player.media, 'pause');
+            });
+        });
+    },
+
+    // FIXME: Using Vimeo's code for now
+    setAspectRatio: function setAspectRatio(input) {
+        var ratio = utils.is.string(input) ? input.split(':') : this.config.ratio.split(':');
+        var padding = 100 / ratio[0] * ratio[1];
+        this.elements.wrapper.style.paddingBottom = padding + '%';
+
+        if (this.supported.ui) {
+            var height = 240;
+            var offset = (height - padding) / (height / 50);
+
+            this.media.style.transform = 'translateY(-' + offset + '%)';
+        }
+    },
+    parseTwitchId: function parseTwitchId(source) {
+        // By default, we treat things as videos
+        // If it contains a prefix of 'channel:', 'video:', 'collection:'
+        // then it's treated accordingly
+        var colonIndex = source.indexOf(':');
+        var hasPrefix = colonIndex !== -1;
+        if (hasPrefix) {
+            var idType = source.substr(0, colonIndex);
+            var id = source.substr(colonIndex + 1);
+            return {
+                type: idType,
+                src: id
+            };
+        }
+        return {
+            type: 'video',
+            src: source
+        };
+    }
+};
+
+// ==========================================================================
+
 // Sniff out the browser
 var browser$3 = utils.getBrowser();
 
@@ -6452,7 +6764,9 @@ var media = {
                 case 'vimeo':
                     vimeo.setup.call(this);
                     break;
-
+                case 'twitch':
+                    twitch.setup.call(this);
+                    break;
                 default:
                     break;
             }
@@ -6529,6 +6843,7 @@ var source = {
 
                 case 'youtube:video':
                 case 'vimeo:video':
+                case 'twitch:video':
                     _this2.media = utils.createElement('div', {
                         src: input.sources[0].src
                     });
@@ -6732,7 +7047,7 @@ var Plyr = function () {
         }, 0);
 
         // Set media type based on tag or data attribute
-        // Supported: video, audio, vimeo, youtube
+        // Supported: video, audio, vimeo, youtube, twitch
         var type = this.media.tagName.toLowerCase();
 
         // Embed properties
@@ -7191,8 +7506,8 @@ var Plyr = function () {
                         utils.toggleClass(_this2.elements.controls, _this2.config.classNames.noTransition, false);
                     }
 
-                    // Check if controls toggled
-                    var toggled = utils.toggleClass(_this2.elements.container, _this2.config.classNames.hideControls, true);
+                    // Set hideControls class
+                    var toggled = utils.toggleClass(_this2.elements.container, _this2.config.classNames.hideControls, _this2.config.hideControls);
 
                     // Trigger event and close menu
                     if (toggled) {
@@ -7346,7 +7661,10 @@ var Plyr = function () {
                     setTimeout(done, 200);
 
                     break;
-
+                case 'twitch:video':
+                    clearInterval(this.timers.playing);
+                    done();
+                    break;
                 default:
                     break;
             }
@@ -7378,7 +7696,7 @@ var Plyr = function () {
     }, {
         key: 'isEmbed',
         get: function get$$1() {
-            return Boolean(this.isYouTube || this.isVimeo);
+            return Boolean(this.isYouTube || this.isVimeo || this.isTwitch);
         }
     }, {
         key: 'isYouTube',
@@ -7389,6 +7707,11 @@ var Plyr = function () {
         key: 'isVimeo',
         get: function get$$1() {
             return Boolean(this.provider === providers.vimeo);
+        }
+    }, {
+        key: 'isTwitch',
+        get: function get$$1() {
+            return Boolean(this.provider === providers.twitch);
         }
     }, {
         key: 'isVideo',
@@ -7470,6 +7793,8 @@ var Plyr = function () {
             if (utils.is.number(buffered)) {
                 return buffered;
             }
+
+            // TODO: Add logic for Twitch
 
             // HTML5
             // TODO: Handle buffered chunks of the media
