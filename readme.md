@@ -14,11 +14,11 @@ A simple, lightweight, accessible and customizable HTML5, YouTube and Vimeo medi
     `<span>` or `<a href="#">` button hacks
 *   **Responsive** - works with any screen size
 *   **HTML Video & Audio** - support for both formats
-*   **[Embedded Video](#embeds)** - support for YouTube and Vimeo video playback
+*   **[Embedded Video](#embeds)** - support for YouTube, Vimeo and Twitch video playback
 *   **[Monetization](#ads)** - make money from your videos
 *   **[Streaming](#streaming)** - support for hls.js, Shaka and dash.js streaming playback
 *   **[API](#api)** - toggle playback, volume, seeking, and more through a standardized API
-*   **[Events](#events)** - no messing around with Vimeo and YouTube APIs, all events are standardized across formats
+*   **[Events](#events)** - no messing around with Vimeo, YouTube and Twitch APIs, all events are standardized across formats
 *   **[Fullscreen](#fullscreen)** - supports native fullscreen with fallback to "full window" modes
 *   **[Shortcuts](#shortcuts)** - supports keyboard shortcuts
 *   **Picture-in-Picture** - supports Safari's picture-in-picture mode
@@ -112,6 +112,25 @@ Or the `<div>` non progressively enhanced method:
 
 ```html
 <div id="player" data-plyr-provider="vimeo" data-plyr-embed-id="76979871"></div>
+```
+
+#### Twitch embed
+
+We currently don't support progressive enhancement for Twitch.
+
+The `div>` non progressively enhanced method can be implemented as shown below
+for the different types of Twitch sources (`video`, `channel`, `collection`):
+
+```html
+<div id="player" data-plyr-provider="twitch" data-plyr-embed-id="video:166432856"></div>
+```
+Or
+```html
+<div id="player" data-plyr-provider="twitch" data-plyr-embed-id="channel:epicenter_en1"></div>
+```
+Or
+```html
+<div id="player" data-plyr-provider="twitch" data-plyr-embed-id="collection:epicenter_en1"></div>
 ```
 
 ### JavaScript
@@ -488,6 +507,25 @@ player.source = {
 
 _Note:_ `src` property for YouTube and Vimeo can either be the video ID or the whole URL.
 
+
+Twitch example:
+
+```javascript
+player.source = {
+    type: 'video',
+    sources: [
+        {
+            src: '166432856',
+            provider: 'twitch',
+        },
+    ],
+};
+```
+
+_Note_: By default `src` will be treated as a Twitch `video` object. You can
+explicitly declare the type of `src` by prefixing the value with `video:`,
+`channel:` or `collection:`
+
 | Property       | Type   | Description                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `type`         | String | Either `video` or `audio`. _Note:_ YouTube and Vimeo are currently not supported as audio sources.                                                                                                                                                                                                                                                                                                             |
@@ -568,6 +606,7 @@ third party APIs. More info on the respective API's here:
 
 *   [YouTube iframe API Reference](https://developers.google.com/youtube/iframe_api_reference)
 *   [Vimeo player.js Reference](https://github.com/vimeo/player.js)
+*   [Twitch embed API Reference](https://dev.twitch.tv/docs/embed/#interactive-frames-for-live-streams-and-vods)
 
 _Note_: Not all API methods may work 100%. Your mileage may vary. It's better to use the Plyr API where possible.
 
@@ -636,7 +675,7 @@ const supported = Plyr.supported('video', 'html5', true);
 The arguments are:
 
 *   Media type (`audio` or `video`)
-*   Provider (`html5`, `youtube` or `vimeo`)
+*   Provider (`html5`, `youtube`, `vimeo` or `twitch`)
 *   Whether the player has the `playsinline` attribute (only applicable to iOS 10+)
 
 ### Disable support programatically
