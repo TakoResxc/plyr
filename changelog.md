@@ -1,3 +1,54 @@
+## v3.2.4
+
+*   Fix issue wher player never reports as ready if controls is empty array
+*   Fix issue where screen reader labels were removed from time displays
+*   Fix issue where custom controls placeholders were not populated
+*   Custom controls HTML example updated
+*   Fix for aria-label being set to the initial state on toggle buttons, overriding the inner labels
+*   Fix for hidden mute button on iOS (not functional for Vimeo due to API limitations) (fixes #656)
+
+## v3.2.3
+
+*   Fix for iOS 9 throwing error for `name` property in fullscreen API (fixes #908)
+
+## v3.2.2
+
+*   Fix for regression in 3.2.1 resulting in hidden buffer display (fixes #920)
+*   Cleaned up incorrect use of `aria-hidden` attribute
+
+## v3.2.1
+
+*   Accessibility improvements for the controls (part of #905 fixes)
+*   Fix for context menu showing on YouTube (thanks Anthony Recenello in Slack)
+*   Vimeo fix for their API not returning the right duration until playback begins (fixes #891)
+
+## v3.2.0
+
+*   Fullscreen fixes (thanks @friday)
+*   Menu fix for if speed not in config
+*   Menu z-index fix (thanks @danielsarin)
+*   i18n fix for missing "Normal" string (thanks @danielsarin)
+*   Safer check for active caption (thanks @Antonio-Laguna)
+*   Add custom property fallback (thanks @friday)
+*   Fixed bug for captions with no srclang and labels and improved logic (fixes #875)
+*   Fix for `playing` false positive (fixes #898)
+*   Fix for IE issue with navigator.language (thanks @nicolasthy) (fixes #893)
+*   Fix for Vimeo controls missing on iOS (thanks @verde-io) (fixes #807)
+*   Fix for double vimeo caption rendering (fixes #877)
+
+## v3.1.0
+
+*   Styling fixes
+
+## v3.1.0-beta.2
+
+*   YouTube playback speed fixes
+
+## v3.1.0-beta.1
+
+*   HTML5 quality selection
+*   Improvements to the YouTube quality selection
+
 ## v3.0.11
 
 *   Muted and autoplay fixes

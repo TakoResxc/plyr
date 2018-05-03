@@ -2,7 +2,6 @@
 // Plyr Event Listeners
 // ==========================================================================
 
-import support from './support';
 import utils from './utils';
 import controls from './controls';
 import ui from './ui';
@@ -254,7 +253,7 @@ class Listeners {
         utils.on(this.player.media, 'timeupdate seeking', event => ui.timeUpdate.call(this.player, event));
 
         // Display duration
-        utils.on(this.player.media, 'durationchange loadedmetadata', event => ui.durationUpdate.call(this.player, event));
+        utils.on(this.player.media, 'durationchange loadeddata loadedmetadata', event => ui.durationUpdate.call(this.player, event));
 
         // Check for audio tracks on load
         // We can't use `loadedmetadata` as it doesn't seem to have audio tracks at that point
@@ -293,6 +292,10 @@ class Listeners {
         // If autoplay, then load advertisement if required
         // TODO: Show some sort of loading state while the ad manager loads else there's a delay before ad shows
         utils.on(this.player.media, 'playing', () => {
+            if (!this.player.ads) {
+                return;
+            }
+
             // If ads are enabled, wait for them first
             if (this.player.ads.enabled && !this.player.ads.initialized) {
                 // Wait for manager response
@@ -331,7 +334,7 @@ class Listeners {
         // Disable right click
         if (this.player.supported.ui && this.player.config.disableContextMenu) {
             utils.on(
-                this.player.media,
+                this.player.elements.wrapper,
                 'contextmenu',
                 event => {
                     event.preventDefault();
@@ -355,13 +358,16 @@ class Listeners {
             this.player.storage.set({ speed: this.player.speed });
         });
 
-        // Quality change
-        utils.on(this.player.media, 'qualitychange', () => {
-            // Update UI
-            controls.updateSetting.call(this.player, 'quality');
-
+        // Quality request
+        utils.on(this.player.media, 'qualityrequested', event => {
             // Save to storage
-            this.player.storage.set({ quality: this.player.quality });
+            this.player.storage.set({ quality: event.detail.quality });
+        });
+
+        // Quality change
+        utils.on(this.player.media, 'qualitychange', event => {
+            // Update UI
+            controls.updateSetting.call(this.player, 'quality', null, event.detail.quality);
         });
 
         // Caption language change
