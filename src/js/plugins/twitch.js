@@ -147,15 +147,15 @@ const twitch = {
             // instance.getQualities is of the format
             // [
             //  {
-            //   "name": "720p60",
-            //   "group": "720p60",
-            //   "codecs": "avc1.4D402A,mp4a.40.2",
-            //   "bitrate": 6831378,
-            //   "width": 1920,
-            //   "height": 1080,
-            //   "framerate": 0,
-            //   "isDefault": true,
-            //   "bandwidth": 6831378
+            //    "name": "720p60",
+            //    "group": "720p60",
+            //    "codecs": "avc1.4D401F,mp4a.40.2",
+            //    "bitrate": 3074863,
+            //    "width": 1280,
+            //    "height": 720,
+            //    "framerate": 0,
+            //    "isDefault": false,
+            //    "bandwidth": 3074863
             //  },
             //  ...
             // ]
