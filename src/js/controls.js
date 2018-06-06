@@ -2,52 +2,88 @@
 // Plyr controls
 // ==========================================================================
 
-import support from './support';
-import utils from './utils';
-import ui from './ui';
-import i18n from './i18n';
 import captions from './captions';
 import html5 from './html5';
+import i18n from './i18n';
+import support from './support';
+import utils from './utils';
 
 // Sniff out the browser
 const browser = utils.getBrowser();
 
 const controls = {
-    // Webkit polyfill for lower fill range
-    updateRangeFill(target) {
-        // Get range from event if event passed
-        const range = utils.is.event(target) ? target.target : target;
 
-        // Needs to be a valid <input type='range'>
-        if (!utils.is.element(range) || range.getAttribute('type') !== 'range') {
-            return;
-        }
-
-        // Set aria value for https://github.com/sampotts/plyr/issues/905
-        range.setAttribute('aria-valuenow', range.value);
-
-        // WebKit only
-        if (!browser.isWebkit) {
-            return;
-        }
-
-        // Set CSS custom property
-        range.style.setProperty('--value', `${range.value / range.max * 100}%`);
-    },
 
     // Get icon URL
     getIconUrl() {
+        const url = new URL(this.config.iconUrl, window.location);
+        const cors = url.host !== window.location.host || (browser.isIE && !window.svg4everybody);
+
         return {
             url: this.config.iconUrl,
-            absolute: this.config.iconUrl.indexOf('http') === 0 || (browser.isIE && !window.svg4everybody),
+            cors,
         };
+    },
+
+    // Find the UI controls and store references in custom controls
+    // TODO: Allow settings menus with custom controls
+    findElements() {
+        try {
+            this.elements.controls = utils.getElement.call(this, this.config.selectors.controls.wrapper);
+
+            // Buttons
+            this.elements.buttons = {
+                play: utils.getElements.call(this, this.config.selectors.buttons.play),
+                pause: utils.getElement.call(this, this.config.selectors.buttons.pause),
+                restart: utils.getElement.call(this, this.config.selectors.buttons.restart),
+                rewind: utils.getElement.call(this, this.config.selectors.buttons.rewind),
+                fastForward: utils.getElement.call(this, this.config.selectors.buttons.fastForward),
+                mute: utils.getElement.call(this, this.config.selectors.buttons.mute),
+                pip: utils.getElement.call(this, this.config.selectors.buttons.pip),
+                airplay: utils.getElement.call(this, this.config.selectors.buttons.airplay),
+                settings: utils.getElement.call(this, this.config.selectors.buttons.settings),
+                captions: utils.getElement.call(this, this.config.selectors.buttons.captions),
+                fullscreen: utils.getElement.call(this, this.config.selectors.buttons.fullscreen),
+            };
+
+            // Progress
+            this.elements.progress = utils.getElement.call(this, this.config.selectors.progress);
+
+            // Inputs
+            this.elements.inputs = {
+                seek: utils.getElement.call(this, this.config.selectors.inputs.seek),
+                volume: utils.getElement.call(this, this.config.selectors.inputs.volume),
+            };
+
+            // Display
+            this.elements.display = {
+                buffer: utils.getElement.call(this, this.config.selectors.display.buffer),
+                currentTime: utils.getElement.call(this, this.config.selectors.display.currentTime),
+                duration: utils.getElement.call(this, this.config.selectors.display.duration),
+            };
+
+            // Seek tooltip
+            if (utils.is.element(this.elements.progress)) {
+                this.elements.display.seekTooltip = this.elements.progress.querySelector(`.${this.config.classNames.tooltip}`);
+            }
+
+            return true;
+        } catch (error) {
+            // Log it
+            this.debug.warn('It looks like there is a problem with your custom controls HTML', error);
+
+            // Restore native video controls
+            this.toggleNativeControls(true);
+
+            return false;
+        }
     },
 
     // Create <svg> icon
     createIcon(type, attributes) {
         const namespace = 'http://www.w3.org/2000/svg';
         const iconUrl = controls.getIconUrl.call(this);
-        const iconPath = `${!iconUrl.absolute ? iconUrl.url : ''}#${this.config.iconPrefix}`;
+        const iconPath = `${!iconUrl.cors ? iconUrl.url : ''}#${this.config.iconPrefix}`;
 
         // Create <svg>
         const icon = document.createElementNS(namespace, 'svg');
@@ -316,7 +352,7 @@ const controls = {
                     break;
             }
 
-            progress.textContent = `% ${suffix.toLowerCase()}`;
+            progress.innerText = `% ${suffix.toLowerCase()}`;
         }
 
         this.elements.display[type] = progress;
@@ -372,6 +408,124 @@ const controls = {
         list.appendChild(item);
     },
 
+    // Update the displayed time
+    updateTimeDisplay(target = null, time = 0, inverted = false) {
+        // Bail if there's no element to display or the value isn't a number
+        if (!utils.is.element(target) || !utils.is.number(time)) {
+            return;
+        }
+
+        // Always display hours if duration is over an hour
+        const forceHours = utils.getHours(this.duration) > 0;
+
+        // eslint-disable-next-line no-param-reassign
+        target.innerText = utils.formatTime(time, forceHours, inverted);
+    },
+
+    // Update volume UI and storage
+    updateVolume() {
+        if (!this.supported.ui) {
+            return;
+        }
+
+        // Update range
+        if (utils.is.element(this.elements.inputs.volume)) {
+            controls.setRange.call(this, this.elements.inputs.volume, this.muted ? 0 : this.volume);
+        }
+
+        // Update mute state
+        if (utils.is.element(this.elements.buttons.mute)) {
+            utils.toggleState(this.elements.buttons.mute, this.muted || this.volume === 0);
+        }
+    },
+
+    // Update seek value and lower fill
+    setRange(target, value = 0) {
+        if (!utils.is.element(target)) {
+            return;
+        }
+
+        // eslint-disable-next-line
+        target.value = value;
+
+        // Webkit range fill
+        controls.updateRangeFill.call(this, target);
+    },
+
+    // Update <progress> elements
+    updateProgress(event) {
+        if (!this.supported.ui || !utils.is.event(event)) {
+            return;
+        }
+
+        let value = 0;
+
+        const setProgress = (target, input) => {
+            const value = utils.is.number(input) ? input : 0;
+            const progress = utils.is.element(target) ? target : this.elements.display.buffer;
+
+            // Update value and label
+            if (utils.is.element(progress)) {
+                progress.value = value;
+
+                // Update text label inside
+                const label = progress.getElementsByTagName('span')[0];
+                if (utils.is.element(label)) {
+                    label.childNodes[0].nodeValue = value;
+                }
+            }
+        };
+
+        if (event) {
+            switch (event.type) {
+                // Video playing
+                case 'timeupdate':
+                case 'seeking':
+                case 'seeked':
+                    value = utils.getPercentage(this.currentTime, this.duration);
+
+                    // Set seek range value only if it's a 'natural' time event
+                    if (event.type === 'timeupdate') {
+                        controls.setRange.call(this, this.elements.inputs.seek, value);
+                    }
+
+                    break;
+
+                // Check buffer status
+                case 'playing':
+                case 'progress':
+                    setProgress(this.elements.display.buffer, this.buffered * 100);
+
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    },
+
+    // Webkit polyfill for lower fill range
+    updateRangeFill(target) {
+        // Get range from event if event passed
+        const range = utils.is.event(target) ? target.target : target;
+
+        // Needs to be a valid <input type='range'>
+        if (!utils.is.element(range) || range.getAttribute('type') !== 'range') {
+            return;
+        }
+
+        // Set aria value for https://github.com/sampotts/plyr/issues/905
+        range.setAttribute('aria-valuenow', range.value);
+
+        // WebKit only
+        if (!browser.isWebkit) {
+            return;
+        }
+
+        // Set CSS custom property
+        range.style.setProperty('--value', `${range.value / range.max * 100}%`);
+    },
+
     // Update hover tooltip for seeking
     updateSeekTooltip(event) {
         // Bail if setting not true
@@ -386,7 +540,7 @@ const controls = {
 
         // Calculate percentage
         let percent = 0;
-        const clientRect = this.elements.inputs.seek.getBoundingClientRect();
+        const clientRect = this.elements.progress.getBoundingClientRect();
         const visible = `${this.config.classNames.tooltip}--visible`;
 
         const toggle = toggle => {
@@ -416,7 +570,7 @@ const controls = {
         }
 
         // Display the time a click would seek to
-        ui.updateTimeDisplay.call(this, this.elements.display.seekTooltip, this.duration / 100 * percent);
+        controls.updateTimeDisplay.call(this, this.elements.display.seekTooltip, this.duration / 100 * percent);
 
         // Set position
         this.elements.display.seekTooltip.style.left = `${percent}%`;
@@ -429,6 +583,47 @@ const controls = {
         ].includes(event.type)) {
             toggle(event.type === 'mouseenter');
         }
+    },
+
+    // Handle time change event
+    timeUpdate(event) {
+        // Only invert if only one time element is displayed and used for both duration and currentTime
+        const invert = !utils.is.element(this.elements.display.duration) && this.config.invertTime;
+
+        // Duration
+        controls.updateTimeDisplay.call(this, this.elements.display.currentTime, invert ? this.duration - this.currentTime : this.currentTime, invert);
+
+        // Ignore updates while seeking
+        if (event && event.type === 'timeupdate' && this.media.seeking) {
+            return;
+        }
+
+        // Playing progress
+        controls.updateProgress.call(this, event);
+    },
+
+    // Show the duration on metadataloaded or durationchange events
+    durationUpdate() {
+        // Bail if no ui or durationchange event triggered after playing/seek when invertTime is false
+        if (!this.supported.ui || (!this.config.invertTime && this.currentTime)) {
+            return;
+        }
+
+        // If there's a spot to display duration
+        const hasDuration = utils.is.element(this.elements.display.duration);
+
+        // If there's only one time display, display duration there
+        if (!hasDuration && this.config.displayDuration && this.paused) {
+            controls.updateTimeDisplay.call(this, this.elements.display.currentTime, this.duration);
+        }
+
+        // If there's a duration element, update content
+        if (hasDuration) {
+            controls.updateTimeDisplay.call(this, this.elements.display.duration, this.duration);
+        }
+
+        // Update the tooltip (if visible)
+        controls.updateSeekTooltip.call(this);
     },
 
     // Hide/show a tab
@@ -469,26 +664,7 @@ const controls = {
 
         // Get the badge HTML for HD, 4K etc
         const getBadge = quality => {
-            let label = '';
-
-            switch (quality) {
-                case 2160:
-                    label = '4K';
-                    break;
-
-                case 1440:
-                case 1080:
-                case 720:
-                    label = 'HD';
-                    break;
-
-                case 576:
-                    label = 'SD';
-                    break;
-
-                default:
-                    break;
-            }
+            const label = i18n.get(`qualityBadge.${quality}`, this.config);
 
             if (!label.length) {
                 return null;
@@ -512,7 +688,6 @@ const controls = {
     },
 
     // Translate a value into a nice label
-    // TODO: Localisation
     getLabel(setting, value) {
         switch (setting) {
             case 'speed':
@@ -520,7 +695,13 @@ const controls = {
 
             case 'quality':
                 if (utils.is.number(value)) {
-                    return `${value}p`;
+                    const label = i18n.get(`qualityLabel.${value}`, this.config);
+
+                    if (!label.length) {
+                        return `${value}p`;
+                    }
+
+                    return label;
                 }
 
                 return utils.toTitleCase(value);
@@ -687,12 +868,9 @@ const controls = {
                 'language',
                 track.label,
                 track.language !== 'enabled' ? controls.createBadge.call(this, track.language.toUpperCase()) : null,
-                track.language.toLowerCase() === this.captions.language.toLowerCase(),
+                track.language.toLowerCase() === this.language,
             );
         });
-
-        // Store reference
-        this.options.captions = tracks.map(track => track.language);
 
         controls.updateSetting.call(this, type, list);
     },
@@ -840,11 +1018,9 @@ const controls = {
     },
 
     // Toggle Menu
-    showTab(event) {
+    showTab(target = '') {
         const { menu } = this.elements.settings;
-        const tab = event.target;
-        const show = tab.getAttribute('aria-expanded') === 'false';
-        const pane = document.getElementById(tab.getAttribute('aria-controls'));
+        const pane = document.getElementById(target);
 
         // Nothing to show, bail
         if (!utils.is.element(pane)) {
@@ -907,8 +1083,12 @@ const controls = {
         current.setAttribute('tabindex', -1);
 
         // Set attributes on target
-        utils.toggleHidden(pane, !show);
-        tab.setAttribute('aria-expanded', show);
+        utils.toggleHidden(pane, false);
+
+        const tabs = utils.getElements.call(this, `[aria-controls="${target}"]`);
+        Array.from(tabs).forEach(tab => {
+            tab.setAttribute('aria-expanded', true);
+        });
         pane.removeAttribute('tabindex');
 
         // Focus the first item
@@ -967,7 +1147,6 @@ const controls = {
                 const tooltip = utils.createElement(
                     'span',
                     {
-                        role: 'tooltip',
                         class: this.config.classNames.tooltip,
                     },
                     '00:00',
@@ -1183,7 +1362,7 @@ const controls = {
             const icon = controls.getIconUrl.call(this);
 
             // Only load external sprite using AJAX
-            if (icon.absolute) {
+            if (icon.cors) {
                 utils.loadSprite(icon.url, 'sprite-plyr');
             }
         }
@@ -1269,7 +1448,7 @@ const controls = {
 
         // Find the elements if need be
         if (!utils.is.element(this.elements.controls)) {
-            utils.findElements.call(this);
+            controls.findElements.call(this);
         }
 
         // Edge sometimes doesn't finish the paint so force a redraw

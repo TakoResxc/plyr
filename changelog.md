@@ -1,3 +1,75 @@
+# v3.3.10
+
+*   Fix for buffer display alignment and incorrect BEM classname
+*   Fix for playback not resuming position after quality swap (fixes #991, thanks @philipgiuliani!)
+*   Travis integration (thanks @friday!)
+*   Translate quality badges and quality names (thanks @philipgiuliani!)
+*   Improve captions handling for streaming (thanks @friday!)
+*   Call duration update method manually if user config has duration (thanks @friday!)
+
+# v3.3.9
+
+Again, more changes from @friday!
+
+*   Restore window reference in `utils.is.cue()`
+*   Fix InvalidStateError and IE11 issues
+*   Respect storage being disabled for storage getter
+
+# v3.3.8
+
+Many changes here thanks to @friday:
+
+*   Added missing URL polyfill
+*   Pause while seeking to mimic default HTML5 behaviour
+*   Add `seeked` event listener to update progress (fixes #966)
+*   Trigger seeked event in youtube plugin if either playing or paused (fixes #921)
+*   Fix for YouTube and Vimeo autoplays on seek (fixes #876)
+*   Toggle controls improvements
+*   Cleanup unused code
+*   Poster image loading improvements
+*   Fix for seek tooltip vs click accuracy
+
+# v3.3.7
+
+*   Poster fixes (thanks @friday)
+*   Grid tweak
+
+# v3.3.6
+
+*   Vimeo fixes for mute state
+*   Vimeo ID fix (fixes #945)
+*   Use `<div>` for poster container
+*   Tooltip fixes for unicode languages (fixes #943)
+
+# v3.3.5
+
+*   Removed `.load()` call as it breaks HLS (see #870)
+
+# v3.3.4
+
+*   Fix for controls sometimes not showing while video is playing
+*   Fixed logic for show home tab on option select
+
+# v3.3.3
+
+*   Reverted change to show home tab on option select due to usability regression
+
+# v3.3.2
+
+*   Fix for ads running in audio
+*   Fix for setting poster on source change
+
+## v3.3.0
+
+*   Now using a custom poster image element to hide the YouTube play button and give more control over when the poster image shows
+*   Renamed `showPosterOnEnd` to `resetOnEnd` as it makes more sense and now works for all players and does not reload media
+*   Fix for same domain SVG URLs (raised by Jochem in Slack)
+*   [`URL`](https://developer.mozilla.org/en-US/docs/Web/API/Window/URL) is polyfill now required
+*   Added pause className (fixes #941)
+*   Button height set in CSS (auto) (fixes #928)
+*   Don't autoplay cloned original media (fixes #936)
+*   Return to the home menu pane after selecting an option
+
 ## v3.2.4
 
 *   Fix issue wher player never reports as ready if controls is empty array

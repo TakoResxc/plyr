@@ -1,26 +1,24 @@
 // ==========================================================================
 // Plyr
-// plyr.js v3.2.4
+// plyr.js v3.3.10
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
 
-import { providers, types } from './types';
-import defaults from './defaults';
-import support from './support';
-import utils from './utils';
-
+import captions from './captions';
 import Console from './console';
+import controls from './controls';
+import defaults from './defaults';
 import Fullscreen from './fullscreen';
 import Listeners from './listeners';
-import Storage from './storage';
-import Ads from './plugins/ads';
-
-import captions from './captions';
-import controls from './controls';
 import media from './media';
+import Ads from './plugins/ads';
 import source from './source';
+import Storage from './storage';
+import support from './support';
+import { providers, types } from './types';
 import ui from './ui';
+import utils from './utils';
 
 // Private properties
 // TODO: Use a WeakMap for private globals
@@ -57,6 +55,7 @@ class Plyr {
         this.config = utils.extend(
             {},
             defaults,
+            Plyr.defaults,
             options || {},
             (() => {
                 try {
@@ -134,17 +133,9 @@ class Plyr {
         }
 
         // Cache original element state for .destroy()
-        // TODO: Investigate a better solution as I suspect this causes reported double load issues?
-        setTimeout(() => {
-            const clone = this.media.cloneNode(true);
-
-            // Prevent the clone autoplaying
-            if (clone.getAttribute('autoplay')) {
-                clone.pause();
-            }
-
-            this.elements.original = clone;
-        }, 0);
+        const clone = this.media.cloneNode(true);
+        clone.autoplay = false;
+        this.elements.original = clone;
 
         // Set media type based on tag or data attribute
         // Supported: video, audio, vimeo, youtube
@@ -343,11 +334,6 @@ class Plyr {
             return null;
         }
 
-        // If ads are enabled, wait for them first
-        /* if (this.ads.enabled && !this.ads.initialized) {
-            return this.ads.managerPromise.then(() => this.ads.play()).catch(() => this.media.play());
-        } */
-
         // Return the promise (for HTML5)
         return this.media.play();
     }
@@ -364,6 +350,13 @@ class Plyr {
     }
 
     /**
+     * Get playing state
+     */
+    get playing() {
+        return Boolean(this.ready && !this.paused && !this.ended);
+    }
+
+    /**
      * Get paused state
      */
     get paused() {
@@ -371,10 +364,10 @@ class Plyr {
     }
 
     /**
-     * Get playing state
+     * Get stopped state
      */
-    get playing() {
-        return Boolean(this.ready && !this.paused && !this.ended && (this.isHTML5 ? this.media.readyState > 2 : true));
+    get stopped() {
+        return Boolean(this.paused && this.currentTime === 0);
     }
 
     /**
@@ -404,7 +397,8 @@ class Plyr {
      */
     stop() {
         if (this.isHTML5) {
-            this.media.load();
+            this.pause();
+            this.restart();
         } else if (utils.is.function(this.media.stop)) {
             this.media.stop();
         }
@@ -438,21 +432,16 @@ class Plyr {
      * @param {number} input - where to seek to in seconds. Defaults to 0 (the start)
      */
     set currentTime(input) {
-        let targetTime = 0;
-
-        if (utils.is.number(input)) {
-            targetTime = input;
+        // Bail if media duration isn't available yet
+        if (!this.duration) {
+            return;
         }
 
-        // Normalise targetTime
-        if (targetTime < 0) {
-            targetTime = 0;
-        } else if (targetTime > this.duration) {
-            targetTime = this.duration;
-        }
+        // Validate input
+        const inputIsValid = utils.is.number(input) && input > 0;
 
         // Set
-        this.media.currentTime = targetTime;
+        this.media.currentTime = inputIsValid ? Math.min(input, this.duration) : 0;
 
         // Logging
         this.debug.log(`Seeking to ${this.currentTime} seconds`);
@@ -500,11 +489,11 @@ class Plyr {
         // Faux duration set via config
         const fauxDuration = parseFloat(this.config.duration);
 
-        // True duration
-        const realDuration = this.media ? Number(this.media.duration) : 0;
+        // Media duration can be NaN before the media has loaded
+        const duration = (this.media || {}).duration || 0;
 
-        // If custom duration is funky, use regular duration
-        return !Number.isNaN(fauxDuration) ? fauxDuration : realDuration;
+        // If config duration is funky, use regular duration
+        return fauxDuration || duration;
     }
 
     /**
@@ -686,7 +675,7 @@ class Plyr {
             quality = Number(input);
         }
 
-        if (!utils.is.number(quality) || quality === 0) {
+        if (!utils.is.number(quality)) {
             quality = this.storage.get('quality');
         }
 
@@ -799,25 +788,23 @@ class Plyr {
     }
 
     /**
-     * Set the poster image for a HTML5 video
+     * Set the poster image for a video
      * @param {input} - the URL for the new poster image
      */
     set poster(input) {
-        if (!this.isHTML5 || !this.isVideo) {
-            this.debug.warn('Poster can only be set on HTML5 video');
+        if (!this.isVideo) {
+            this.debug.warn('Poster can only be set for video');
             return;
         }
 
-        if (utils.is.string(input)) {
-            this.media.setAttribute('poster', input);
-        }
+        ui.setPoster.call(this, input);
     }
 
     /**
      * Get the current poster image
      */
     get poster() {
-        if (!this.isHTML5 || !this.isVideo) {
+        if (!this.isVideo) {
             return null;
         }
 
@@ -851,24 +838,19 @@ class Plyr {
         }
 
         // If the method is called without parameter, toggle based on current value
-        const show = utils.is.boolean(input) ? input : !this.elements.container.classList.contains(this.config.classNames.captions.active);
-
-        // Nothing to change...
-        if (this.captions.active === show) {
-            return;
-        }
-
-        // Set global
-        this.captions.active = show;
+        const active = utils.is.boolean(input) ? input : !this.elements.container.classList.contains(this.config.classNames.captions.active);
 
         // Toggle state
-        utils.toggleState(this.elements.buttons.captions, this.captions.active);
+        utils.toggleState(this.elements.buttons.captions, active);
 
         // Add class hook
-        utils.toggleClass(this.elements.container, this.config.classNames.captions.active, this.captions.active);
+        utils.toggleClass(this.elements.container, this.config.classNames.captions.active, active);
 
-        // Trigger an event
-        utils.dispatchEvent.call(this, this.media, this.captions.active ? 'captionsenabled' : 'captionsdisabled');
+        // Update state and trigger event
+        if (active !== this.captions.active) {
+            this.captions.active = active;
+            utils.dispatchEvent.call(this, this.media, this.captions.active ? 'captionsenabled' : 'captionsdisabled');
+        }
     }
 
     /**
@@ -976,119 +958,32 @@ class Plyr {
 
     /**
      * Toggle the player controls
-     * @param {boolean} toggle - Whether to show the controls
+     * @param {boolean} [toggle] - Whether to show the controls
      */
     toggleControls(toggle) {
-        // We need controls of course...
-        if (!utils.is.element(this.elements.controls)) {
-            return;
-        }
+        // Don't toggle if missing UI support or if it's audio
+        if (this.supported.ui && !this.isAudio) {
+            // Get state before change
+            const isHidden = utils.hasClass(this.elements.container, this.config.classNames.hideControls);
 
-        // Don't hide if no UI support or it's audio
-        if (!this.supported.ui || this.isAudio) {
-            return;
-        }
+            // Negate the argument if not undefined since adding the class to hides the controls
+            const force = typeof toggle === 'undefined' ? undefined : !toggle;
 
-        let delay = 0;
-        let show = toggle;
-        let isEnterFullscreen = false;
+            // Apply and get updated state
+            const hiding = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, force);
 
-        // Get toggle state if not set
-        if (!utils.is.boolean(toggle)) {
-            if (utils.is.event(toggle)) {
-                // Is the enter fullscreen event
-                isEnterFullscreen = toggle.type === 'enterfullscreen';
-
-                // Events that show the controls
-                const showEvents = [
-                    'touchstart',
-                    'touchmove',
-                    'mouseenter',
-                    'mousemove',
-                    'focusin',
-                ];
-
-                // Events that delay hiding
-                const delayEvents = [
-                    'touchmove',
-                    'touchend',
-                    'mousemove',
-                ];
-
-                // Whether to show controls
-                show = showEvents.includes(toggle.type);
-
-                // Delay hiding on move events
-                if (delayEvents.includes(toggle.type)) {
-                    delay = 2000;
-                }
-
-                // Delay a little more for keyboard users
-                if (!this.touch && toggle.type === 'focusin') {
-                    delay = 3000;
-                    utils.toggleClass(this.elements.controls, this.config.classNames.noTransition, true);
-                }
-            } else {
-                show = utils.hasClass(this.elements.container, this.config.classNames.hideControls);
+            // Close menu
+            if (hiding && this.config.controls.includes('settings') && !utils.is.empty(this.config.settings)) {
+                controls.toggleMenu.call(this, false);
             }
-        }
-
-        // Clear timer on every call
-        clearTimeout(this.timers.controls);
-
-        // If the mouse is not over the controls, set a timeout to hide them
-        if (show || this.paused || this.loading) {
-            // Check if controls toggled
-            const toggled = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, false);
-
-            // Trigger event
-            if (toggled) {
-                utils.dispatchEvent.call(this, this.media, 'controlsshown');
+            // Trigger event on change
+            if (hiding !== isHidden) {
+                const eventName = hiding ? 'controlshidden' : 'controlsshown';
+                utils.dispatchEvent.call(this, this.media, eventName);
             }
-
-            // Always show controls when paused or if touch
-            if (this.paused || this.loading) {
-                return;
-            }
-
-            // Delay for hiding on touch
-            if (this.touch) {
-                delay = 3000;
-            }
+            return !hiding;
         }
-
-        // If toggle is false or if we're playing (regardless of toggle),
-        // then set the timer to hide the controls
-        if (!show || this.playing) {
-            this.timers.controls = setTimeout(() => {
-                // We need controls of course...
-                if (!utils.is.element(this.elements.controls)) {
-                    return;
-                }
-
-                // If the mouse is over the controls (and not entering fullscreen), bail
-                if ((this.elements.controls.pressed || this.elements.controls.hover) && !isEnterFullscreen) {
-                    return;
-                }
-
-                // Restore transition behaviour
-                if (!utils.hasClass(this.elements.container, this.config.classNames.hideControls)) {
-                    utils.toggleClass(this.elements.controls, this.config.classNames.noTransition, false);
-                }
-
-                // Set hideControls class
-                const toggled = utils.toggleClass(this.elements.container, this.config.classNames.hideControls, this.config.hideControls);
-
-                // Trigger event and close menu
-                if (toggled) {
-                    utils.dispatchEvent.call(this, this.media, 'controlshidden');
-
-                    if (this.config.controls.includes('settings') && !utils.is.empty(this.config.settings)) {
-                        controls.toggleMenu.call(this, false);
-                    }
-                }
-            }, delay);
-        }
+        return false;
     }
 
     /**
@@ -1250,6 +1145,31 @@ class Plyr {
     static loadSprite(url, id) {
         return utils.loadSprite(url, id);
     }
+
+    /**
+     * Setup multiple instances
+     * @param {*} selector
+     * @param {object} options
+     */
+    static setup(selector, options = {}) {
+        let targets = null;
+
+        if (utils.is.string(selector)) {
+            targets = Array.from(document.querySelectorAll(selector));
+        } else if (utils.is.nodeList(selector)) {
+            targets = Array.from(selector);
+        } else if (utils.is.array(selector)) {
+            targets = selector.filter(i => utils.is.element(i));
+        }
+
+        if (utils.is.empty(targets)) {
+            return null;
+        }
+
+        return targets.map(t => new Plyr(t, options));
+    }
 }
+
+Plyr.defaults = utils.cloneDeep(defaults);
 
 export default Plyr;
