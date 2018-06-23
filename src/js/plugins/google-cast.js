@@ -1,8 +1,17 @@
-import utils from './../utils';
+import is from '../utils/is';
+import { getAttributesFromSelector, insertAfter, toggleClass, createElement } from '../utils/elements';
+import { triggerEvent } from '../utils/events';
+import loadScript from '../utils/loadScript';
+import { extend } from '../utils/objects';
 import Console from './../console';
 
 const googleCast = {
     setup(config) {
+        if (!window.chrome) { // TODO: Figure out if this is the right check
+            // We're not on Chrome. Bail since google-cast does not work
+            // on other browsers
+            return;
+        }
         googleCast.defaults = {};
         googleCast.config = {};
 
@@ -19,18 +28,18 @@ const googleCast = {
         // TODO: Get cast logs under a separate namespace?
 
         // Inject the container
-        if (!utils.is.element(this.elements.googlecast)) {
-            this.elements.googlecast = utils.createElement(
+        if (!is.element(this.elements.googlecast)) {
+            this.elements.googlecast = createElement(
                 'div',
-                utils.getAttributesFromSelector(this.config.selectors.googlecast)
+                getAttributesFromSelector(this.config.selectors.googlecast)
             );
-            utils.insertAfter(this.elements.googlecast, this.elements.wrapper);
+            insertAfter(this.elements.googlecast, this.elements.wrapper);
         }
         // Set the class hook
-        utils.toggleClass(this.elements.container, this.config.classNames.googlecast.enabled, true);
+        toggleClass(this.elements.container, this.config.classNames.googlecast.enabled, true);
 
         if (!window.chrome.cast) {
-            utils.loadScript(this.config.urls.googleCast.api).then(() => {
+            loadScript(this.config.urls.googleCast.api).then(() => {
                 // FIXME: There __has__ to be a better way to do this
                 // window.chrome.cast isn't immediately available when this function runs
                 const interval = setInterval(() => {
@@ -42,7 +51,7 @@ const googleCast = {
                                 autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
                             },
                         };
-                        const opts = utils.extend({}, googleCast.defaults, config);
+                        const opts = extend({}, googleCast.defaults, config);
                         googleCast.initializeCastApi(opts);
                     }
                 }, 100);
@@ -144,7 +153,7 @@ const googleCast = {
                 currentTime: plyr.currentTime,
             },
         };
-        const options = utils.extend({}, defaults);
+        const options = extend({}, defaults);
 
         const mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
         mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
@@ -253,8 +262,8 @@ const googleCast = {
         if (plyr && castEvent) {
             const castActive = castEvent === 'castenabled';
             // Add class hook
-            utils.toggleClass(plyr.elements.container, plyr.config.classNames.googlecast.active, castActive);
-            utils.dispatchEvent.call(plyr, plyr.elements.container, castEvent, true);
+            toggleClass(plyr.elements.container, plyr.config.classNames.googlecast.active, castActive);
+            triggerEvent.call(plyr, plyr.elements.container, castEvent, true);
         }
     },
 
@@ -289,6 +298,7 @@ const googleCast = {
     },
 
     requestSession(plyr) {
+        debugger
         // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
@@ -345,15 +355,15 @@ const googleCast = {
         let active = this.storage.googlecast;
 
         // Otherwise fall back to the default config
-        if (!utils.is.boolean(active)) {
+        if (!is.boolean(active)) {
             ({ active } = this.googlecast);
         } else {
             this.googlecast.active = active;
         }
 
         if (active) {
-            utils.toggleClass(this.elements.container, this.config.classNames.googlecast.active, true);
-            utils.toggleState(this.elements.buttons.googlecast, true);
+            toggleClass(this.elements.container, this.config.classNames.googlecast.active, true);
+            toggleState(this.elements.buttons.googlecast, true);
         }
     },
 };

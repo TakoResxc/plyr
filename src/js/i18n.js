@@ -2,26 +2,29 @@
 // Plyr internationalization
 // ==========================================================================
 
-import utils from './utils';
+import is from './utils/is';
+import { getDeep } from './utils/objects';
+import { replaceAll } from './utils/strings';
 
 const i18n = {
     get(key = '', config = {}) {
-        if (utils.is.empty(key) || utils.is.empty(config) || !Object.keys(config.i18n).includes(key)) {
+        if (is.empty(key) || is.empty(config)) {
             return '';
         }
 
-        let string = config.i18n[key];
+        let string = getDeep(config.i18n, key);
+
+        if (is.empty(string)) {
+            return '';
+        }
 
         const replace = {
             '{seektime}': config.seekTime,
             '{title}': config.title,
         };
 
-        Object.entries(replace).forEach(([
-            key,
-            value,
-        ]) => {
-            string = utils.replaceAll(string, key, value);
+        Object.entries(replace).forEach(([key, value]) => {
+            string = replaceAll(string, key, value);
         });
 
         return string;
