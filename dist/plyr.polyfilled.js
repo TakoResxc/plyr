@@ -9657,7 +9657,8 @@ typeof navigator === "object" && (function (global, factory) {
 	                        clearInterval(interval);
 	                        googleCast.defaults = {
 	                            options: {
-	                                receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+	                                // receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+	                                receiverApplicationId: 'C248C800',
 	                                autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
 	                            }
 	                        };
@@ -9737,7 +9738,7 @@ typeof navigator === "object" && (function (global, factory) {
 	        var defaults = {
 	            mediaInfo: {
 	                source: plyr.source,
-	                type: 'video/mp4'
+	                contentType: 'video/mp4'
 	            },
 	            metadata: {
 	                metadataType: window.chrome.cast.media.MetadataType.GENERIC,
@@ -9748,27 +9749,50 @@ typeof navigator === "object" && (function (global, factory) {
 	            },
 	            loadRequest: {
 	                autoplay: plyr.playing,
-	                currentTime: plyr.currentTime
+	                currentTime: plyr.currentTime,
+	                customData: {
+	                    type: plyr.type,
+	                    provider: plyr.provider
+	                }
 	            }
 	        };
+
+	        if (plyr.hls) {
+	            // Plyr has been hijacked by HLS
+	            var customData = defaults.loadRequest.customData;
+
+	            customData.subType = 'hls';
+	            customData.source = plyr.hls.manifestURL;
+	        }
+
 	        var options = extend({}, defaults);
 
-	        var mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
+	        var mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.contentType);
+	        mediaInfo.streamType = defaults.mediaInfo.streamType;
+
 	        mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
 	        Object.assign(mediaInfo.metadata, options.metadata);
 
 	        var loadRequest = new window.chrome.cast.media.LoadRequest(mediaInfo);
+	        loadRequest.customData = options.loadRequest.customData;
 	        loadRequest.autoplay = options.loadRequest.autoplay;
 	        loadRequest.currentTime = options.loadRequest.currentTime;
 	        session.loadMedia(loadRequest).then(function () {
-	            googleCast.debug.log('Successfully loaded media');
+	            googleCast.debug.log('Successfully handled loadMedia');
 	            googleCast.bindPlyr(plyr);
-	        }, function (errorCode) {
-	            googleCast.debug.log('Remote media load error: ' + googleCast.getErrorMessage(errorCode));
+	        }).catch(function (err) {
+	            googleCast.debug.log('Error during loadMedia: ' + err);
 	        });
 	    },
 	    setCurrentPlyr: function setCurrentPlyr(plyr) {
 	        googleCast.currentPlyr = plyr;
+	    },
+	    bindEvents: function bindEvents(plyr) {
+	        // Iterate over events and add all listeners
+	        Object.keys(googleCast.events).forEach(function (evt) {
+	            var fn = googleCast.events[evt];
+	            plyr.on(evt, fn);
+	        });
 	    },
 	    bindPlyr: function bindPlyr(plyr, options) {
 	        if (googleCast.currentPlyr !== plyr) {
@@ -9782,11 +9806,8 @@ typeof navigator === "object" && (function (global, factory) {
 	        // TODO: Figure out if we should do plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 	        plyr.remotePlayerController = new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
-	        // Iterate over events and add all listeners
-	        Object.keys(googleCast.events).forEach(function (evt) {
-	            var fn = googleCast.events[evt];
-	            plyr.on(evt, fn);
-	        });
+	        googleCast.bindEvents(plyr);
+	        plyr.googleCastEnabled = true; // FIXME: This should probably use state from controls
 	        googleCast.debug.log('Plyr bound');
 	    },
 	    unbindPlyr: function unbindPlyr(plyr) {
@@ -9798,6 +9819,7 @@ typeof navigator === "object" && (function (global, factory) {
 	                plyr.off(evt, fn);
 	            });
 	        }
+	        delete currentPlyr.googleCastEnabled; // FIXME: This should probably use state from controls
 	        googleCast.currentPlyr = undefined;
 	        googleCast.currentPlyrOptions = undefined;
 	    },
@@ -10684,7 +10706,7 @@ typeof navigator === "object" && (function (global, factory) {
 	            });
 
 	            // Google cast
-	            on(this.player.elements.buttons.googlecast, 'click', this.player.googleCast, 'googlecast');
+	            bind(this.player.elements.buttons.googlecast, 'click', this.player.googleCast, 'googlecast');
 
 	            // Fullscreen toggle
 	            bind(this.player.elements.buttons.fullscreen, 'click', function () {
@@ -12670,6 +12692,11 @@ typeof navigator === "object" && (function (global, factory) {
 
 	            // Update the fullscreen support
 	            _this2.fullscreen.update();
+	            if (_this2.googleCastEnabled) {
+	                // FIXME: This should probably use state from controls
+	                googleCast.bindEvents(_this2);
+	                googleCast.loadMedia(_this2);
+	            }
 	        }, true);
 	    }
 	};

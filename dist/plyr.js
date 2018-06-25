@@ -4254,7 +4254,8 @@ typeof navigator === "object" && (function (global, factory) {
                 'pause': googleCast.onPause,
                 'seeked': googleCast.onSeek,
                 'volumechange': googleCast.onVolumeChange,
-                'qualityrequested': googleCast.onQualityChange
+                'qualityrequested': googleCast.onQualityChange,
+                'loadedmetadata': googleCast.onLoadedMetadata
             };
 
             googleCast.debug = new Console(true);
@@ -4277,7 +4278,8 @@ typeof navigator === "object" && (function (global, factory) {
                             clearInterval(interval);
                             googleCast.defaults = {
                                 options: {
-                                    receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                    // receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                    receiverApplicationId: 'C248C800',
                                     autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
                                 }
                             };
@@ -4326,6 +4328,16 @@ typeof navigator === "object" && (function (global, factory) {
             plyr.remotePlayerController.seek();
             googleCast.debug.log('Asking remote player to seek to ' + timestamp);
         },
+        onLoadedMetadata: function onLoadedMetadata() {
+            googleCast.debug.log('Running googleCast.onReady()');
+            var plyr = googleCast.getCurrentPlyr();
+            var oldLoadRequest = plyr.googleCastLoadRequest;
+            var newLoadRequest = googleCast.buildLoadRequest(plyr);
+            if (oldLoadRequest.media.contentId === newLoadRequest.media.contentId) {
+                return;
+            }
+            googleCast.loadMedia(plyr, newLoadRequest);
+        },
         onReady: function onReady() {
             googleCast.debug.log('Running googleCast.onReady()');
             var plyr = googleCast.getCurrentPlyr();
@@ -4346,18 +4358,29 @@ typeof navigator === "object" && (function (global, factory) {
             var plyr = googleCast.getCurrentPlyr();
             googleCast.loadMedia(plyr);
         },
-        loadMedia: function loadMedia(plyr) {
+        loadMedia: function loadMedia(plyr, loadRequest) {
             googleCast.debug.log('load media called');
             var session = googleCast.getCurrentSession();
             if (!session) {
                 return;
             }
-
+            if (!loadRequest) {
+                loadRequest = googleCast.buildLoadRequest(plyr);
+            }
+            session.loadMedia(loadRequest).then(function () {
+                googleCast.debug.log('Successfully handled loadMedia');
+                googleCast.getCurrentPlyr().googleCastLoadRequest = loadRequest;
+                googleCast.bindPlyr(plyr);
+            }).catch(function (err) {
+                googleCast.debug.log('Error during loadMedia: ' + err);
+            });
+        },
+        buildLoadRequest: function buildLoadRequest(plyr) {
             // TODO: We need to be able to override the defaults
             var defaults = {
                 mediaInfo: {
                     source: plyr.source,
-                    type: 'video/mp4'
+                    contentType: 'video/mp4'
                 },
                 metadata: {
                     metadataType: window.chrome.cast.media.MetadataType.GENERIC,
@@ -4368,27 +4391,45 @@ typeof navigator === "object" && (function (global, factory) {
                 },
                 loadRequest: {
                     autoplay: plyr.playing,
-                    currentTime: plyr.currentTime
+                    currentTime: plyr.currentTime,
+                    customData: {
+                        type: plyr.type,
+                        provider: plyr.provider
+                    }
                 }
             };
+
+            if (plyr.hls) {
+                // Plyr has been hijacked by HLS
+                var customData = defaults.loadRequest.customData;
+
+                customData.subType = 'hls';
+                customData.source = plyr.hls.manifestURL;
+            }
+
             var options = extend({}, defaults);
 
-            var mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
+            var mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.contentType);
+            mediaInfo.streamType = defaults.mediaInfo.streamType;
+
             mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
             Object.assign(mediaInfo.metadata, options.metadata);
 
             var loadRequest = new window.chrome.cast.media.LoadRequest(mediaInfo);
+            loadRequest.customData = options.loadRequest.customData;
             loadRequest.autoplay = options.loadRequest.autoplay;
             loadRequest.currentTime = options.loadRequest.currentTime;
-            session.loadMedia(loadRequest).then(function () {
-                googleCast.debug.log('Successfully loaded media');
-                googleCast.bindPlyr(plyr);
-            }, function (errorCode) {
-                googleCast.debug.log('Remote media load error: ' + googleCast.getErrorMessage(errorCode));
-            });
+            return loadRequest;
         },
         setCurrentPlyr: function setCurrentPlyr(plyr) {
             googleCast.currentPlyr = plyr;
+        },
+        bindEvents: function bindEvents(plyr) {
+            // Iterate over events and add all listeners
+            Object.keys(googleCast.events).forEach(function (evt) {
+                var fn = googleCast.events[evt];
+                plyr.on(evt, fn);
+            });
         },
         bindPlyr: function bindPlyr(plyr, options) {
             if (googleCast.currentPlyr !== plyr) {
@@ -4402,11 +4443,8 @@ typeof navigator === "object" && (function (global, factory) {
             // TODO: Figure out if we should do plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
             plyr.remotePlayerController = new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
-            // Iterate over events and add all listeners
-            Object.keys(googleCast.events).forEach(function (evt) {
-                var fn = googleCast.events[evt];
-                plyr.on(evt, fn);
-            });
+            googleCast.bindEvents(plyr);
+            plyr.googleCastEnabled = true; // FIXME: This should probably use state from controls
             googleCast.debug.log('Plyr bound');
         },
         unbindPlyr: function unbindPlyr(plyr) {
@@ -4418,6 +4456,7 @@ typeof navigator === "object" && (function (global, factory) {
                     plyr.off(evt, fn);
                 });
             }
+            delete currentPlyr.googleCastEnabled; // FIXME: This should probably use state from controls
             googleCast.currentPlyr = undefined;
             googleCast.currentPlyrOptions = undefined;
         },
@@ -4503,7 +4542,6 @@ typeof navigator === "object" && (function (global, factory) {
             googleCast.debug.log('sessionStateListener: state=' + data.sessionState);
         },
         requestSession: function requestSession(plyr) {
-            debugger;
             // Check if a session already exists, if it does, just use it
             var session = googleCast.getCurrentSession();
 
@@ -7184,6 +7222,7 @@ typeof navigator === "object" && (function (global, factory) {
         change: function change(input) {
             var _this2 = this;
 
+            debugger;
             if (!getDeep(input, 'sources.length')) {
                 this.debug.warn('Invalid source format');
                 return;
@@ -7191,6 +7230,10 @@ typeof navigator === "object" && (function (global, factory) {
 
             // Cancel current network requests
             html5.cancelRequests.call(this);
+
+            if (this.hls) {
+                this.hls.destroy();
+            }
 
             // Destroy instance and re-setup
             this.destroy.call(this, function () {
@@ -7200,6 +7243,9 @@ typeof navigator === "object" && (function (global, factory) {
                 // Remove elements
                 removeElement(_this2.media);
                 _this2.media = null;
+
+                // Remove hls property if set
+                delete plyr.hls;
 
                 // Reset class name
                 if (is.element(_this2.elements.container)) {

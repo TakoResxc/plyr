@@ -22,6 +22,7 @@ const googleCast = {
             'seeked': googleCast.onSeek,
             'volumechange': googleCast.onVolumeChange,
             'qualityrequested': googleCast.onQualityChange,
+            'loadedmetadata': googleCast.onLoadedMetadata,
         };
 
         googleCast.debug = new Console(true);
@@ -47,7 +48,8 @@ const googleCast = {
                         clearInterval(interval);
                         googleCast.defaults = {
                             options: {
-                                receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                // receiverApplicationId: window.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                receiverApplicationId: 'C248C800',
                                 autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
                             },
                         };
@@ -109,6 +111,16 @@ const googleCast = {
         plyr.remotePlayerController.seek();
         googleCast.debug.log(`Asking remote player to seek to ${timestamp}`);
     },
+    onLoadedMetadata() {
+        googleCast.debug.log('Running googleCast.onReady()');
+        const plyr = googleCast.getCurrentPlyr();
+        const oldLoadRequest = plyr.googleCastLoadRequest;
+        const newLoadRequest = googleCast.buildLoadRequest(plyr);
+        if (oldLoadRequest.media.contentId === newLoadRequest.media.contentId) {
+            return;
+        }
+        googleCast.loadMedia(plyr, newLoadRequest);
+    },
     onReady() {
         googleCast.debug.log('Running googleCast.onReady()');
         const plyr = googleCast.getCurrentPlyr();
@@ -128,18 +140,29 @@ const googleCast = {
         const plyr = googleCast.getCurrentPlyr();
         googleCast.loadMedia(plyr);
     },
-    loadMedia(plyr) {
+    loadMedia(plyr, loadRequest) {
         googleCast.debug.log('load media called');
         const session = googleCast.getCurrentSession();
         if (!session) {
             return;
         }
-
+        if (!loadRequest) {
+            loadRequest = googleCast.buildLoadRequest(plyr);
+        }
+        session.loadMedia(loadRequest).then(() => {
+            googleCast.debug.log('Successfully handled loadMedia');
+            googleCast.getCurrentPlyr().googleCastLoadRequest = loadRequest;
+            googleCast.bindPlyr(plyr);
+        }).catch((err) => {
+            googleCast.debug.log(`Error during loadMedia: ${err}`);
+        });
+    },
+    buildLoadRequest(plyr) {
         // TODO: We need to be able to override the defaults
         const defaults = {
             mediaInfo: {
                 source: plyr.source,
-                type: 'video/mp4',
+                contentType: 'video/mp4',
             },
             metadata: {
                 metadataType: window.chrome.cast.media.MetadataType.GENERIC,
@@ -151,29 +174,43 @@ const googleCast = {
             loadRequest: {
                 autoplay: plyr.playing,
                 currentTime: plyr.currentTime,
+                customData: {
+                    type: plyr.type,
+                    provider: plyr.provider,
+                },
             },
         };
+
+        if (plyr.hls) {
+            // Plyr has been hijacked by HLS
+            const { customData } = defaults.loadRequest;
+            customData.subType = 'hls';
+            customData.source = plyr.hls.manifestURL;
+        }
+
         const options = extend({}, defaults);
 
-        const mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.type);
+        const mediaInfo = new window.chrome.cast.media.MediaInfo(options.mediaInfo.source, options.mediaInfo.contentType);
+        mediaInfo.streamType = defaults.mediaInfo.streamType;
+
         mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
         Object.assign(mediaInfo.metadata, options.metadata);
 
         const loadRequest = new window.chrome.cast.media.LoadRequest(mediaInfo);
+        loadRequest.customData = options.loadRequest.customData;
         loadRequest.autoplay = options.loadRequest.autoplay;
         loadRequest.currentTime = options.loadRequest.currentTime;
-        session.loadMedia(loadRequest).then(
-            () => {
-                googleCast.debug.log('Successfully loaded media');
-                googleCast.bindPlyr(plyr);
-            },
-            errorCode => {
-                googleCast.debug.log(`Remote media load error: ${googleCast.getErrorMessage(errorCode)}`);
-            }
-        );
+        return loadRequest;
     },
     setCurrentPlyr(plyr) {
         googleCast.currentPlyr = plyr;
+    },
+    bindEvents(plyr) {
+        // Iterate over events and add all listeners
+        Object.keys(googleCast.events).forEach((evt) => {
+            const fn = googleCast.events[evt];
+            plyr.on(evt, fn);
+        });
     },
     bindPlyr(plyr, options) {
         if (googleCast.currentPlyr !== plyr) {
@@ -187,11 +224,8 @@ const googleCast = {
         // TODO: Figure out if we should do plyr.remotePlayerController = plyr.remotePlayerController || new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
         plyr.remotePlayerController = new window.cast.framework.RemotePlayerController(plyr.remotePlayer);
 
-        // Iterate over events and add all listeners
-        Object.keys(googleCast.events).forEach((evt) => {
-            const fn = googleCast.events[evt];
-            plyr.on(evt, fn);
-        });
+        googleCast.bindEvents(plyr);
+        plyr.googleCastEnabled = true;   // FIXME: This should probably use state from controls
         googleCast.debug.log('Plyr bound');
     },
 
@@ -203,6 +237,7 @@ const googleCast = {
                 plyr.off(evt, fn);
             });
         }
+        delete currentPlyr.googleCastEnabled;   // FIXME: This should probably use state from controls
         googleCast.currentPlyr = undefined;
         googleCast.currentPlyrOptions = undefined;
     },
@@ -298,7 +333,6 @@ const googleCast = {
     },
 
     requestSession(plyr) {
-        debugger
         // Check if a session already exists, if it does, just use it
         const session = googleCast.getCurrentSession();
 
