@@ -18,6 +18,10 @@ const defaults = {
     // Only allow one media playing at once (vimeo only)
     autopause: true,
 
+    // Allow inline playback on iOS (this effects YouTube/Vimeo - HTML5 requires the attribute present)
+    // TODO: Remove iosNative fullscreen option in favour of this (logic needs work)
+    playsinline: true,
+
     // Default time to skip when rewind/fast forward
     seekTime: 10,
 
@@ -56,7 +60,7 @@ const defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.3.10/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.3.12/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -89,15 +93,7 @@ const defaults = {
     // Speed default and options to display
     speed: {
         selected: 1,
-        options: [
-            0.5,
-            0.75,
-            1,
-            1.25,
-            1.5,
-            1.75,
-            2,
-        ],
+        options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
     },
 
     // Keyboard shortcut settings
@@ -151,11 +147,7 @@ const defaults = {
         'airplay',
         'fullscreen',
     ],
-    settings: [
-        'captions',
-        'quality',
-        'speed',
-    ],
+    settings: ['captions', 'quality', 'speed'],
 
     // Localisation
     i18n: {
@@ -165,6 +157,7 @@ const defaults = {
         pause: 'Pause',
         fastForward: 'Forward {seektime}s',
         seek: 'Seek',
+        seekLabel: '{currentTime} of {duration}',
         played: 'Played',
         buffered: 'Buffered',
         currentTime: 'Current time',
@@ -179,6 +172,7 @@ const defaults = {
         frameTitle: 'Player for {title}',
         captions: 'Captions',
         settings: 'Settings',
+        menuBack: 'Go back to previous menu',
         speed: 'Speed',
         normal: 'Normal',
         quality: 'Quality',
@@ -209,7 +203,8 @@ const defaults = {
         },
         youtube: {
             sdk: 'https://www.youtube.com/iframe_api',
-            api: 'https://www.googleapis.com/youtube/v3/videos?id={0}&key={1}&fields=items(snippet(title))&part=snippet',
+            api:
+                'https://www.googleapis.com/youtube/v3/videos?id={0}&key={1}&fields=items(snippet(title))&part=snippet',
         },
         googleIMA: {
             sdk: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js',
@@ -328,6 +323,7 @@ const defaults = {
         },
         progress: '.plyr__progress',
         captions: '.plyr__captions',
+        caption: '.plyr__caption',
         menu: {
             quality: '.js-plyr__menu__list--quality',
         },
@@ -344,6 +340,7 @@ const defaults = {
         posterEnabled: 'plyr__poster-enabled',
         ads: 'plyr__ads',
         control: 'plyr__control',
+        controlPressed: 'plyr__control--pressed',
         playing: 'plyr--playing',
         paused: 'plyr--paused',
         stopped: 'plyr--stopped',
