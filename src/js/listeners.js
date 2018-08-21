@@ -175,6 +175,8 @@ class Listeners {
 
         // Add touch class
         toggleClass(this.player.elements.container, this.player.config.classNames.isTouch, true);
+
+        triggerEvent.call(this.player, this.player.elements.container, 'firsttouch', true);
     }
 
     // Global window & document listeners
