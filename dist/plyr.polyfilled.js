@@ -20,7 +20,7 @@ typeof navigator === "object" && (function (global, factory) {
 	});
 
 	var _core = createCommonjsModule(function (module) {
-	var core = module.exports = { version: '2.5.7' };
+	var core = module.exports = { version: '2.5.5' };
 	if (typeof __e == 'number') __e = core; // eslint-disable-line no-undef
 	});
 	var _core_1 = _core.version;
@@ -333,18 +333,11 @@ typeof navigator === "object" && (function (global, factory) {
 	  };
 	};
 
-	var _shared = createCommonjsModule(function (module) {
 	var SHARED = '__core-js_shared__';
 	var store = _global[SHARED] || (_global[SHARED] = {});
-
-	(module.exports = function (key, value) {
-	  return store[key] || (store[key] = value !== undefined ? value : {});
-	})('versions', []).push({
-	  version: _core.version,
-	  mode: 'global',
-	  copyright: '© 2018 Denis Pushkarev (zloirock.ru)'
-	});
-	});
+	var _shared = function (key) {
+	  return store[key] || (store[key] = {});
+	};
 
 	var shared = _shared('keys');
 
@@ -748,12 +741,12 @@ typeof navigator === "object" && (function (global, factory) {
 	    if ($slice !== undefined && end === undefined) return $slice.call(_anObject(this), start); // FF fix
 	    var len = _anObject(this).byteLength;
 	    var first = _toAbsoluteIndex(start, len);
-	    var fin = _toAbsoluteIndex(end === undefined ? len : end, len);
-	    var result = new (_speciesConstructor(this, $ArrayBuffer))(_toLength(fin - first));
+	    var final = _toAbsoluteIndex(end === undefined ? len : end, len);
+	    var result = new (_speciesConstructor(this, $ArrayBuffer))(_toLength(final - first));
 	    var viewS = new $DataView(this);
 	    var viewT = new $DataView(result);
 	    var index = 0;
-	    while (first < fin) {
+	    while (first < final) {
 	      viewT.setUint8(index++, viewS.getUint8(first++));
 	    } return result;
 	  }
@@ -2651,8 +2644,7 @@ typeof navigator === "object" && (function (global, factory) {
 	    };
 	  // environments with maybe non-completely correct, but existent Promise
 	  } else if (Promise$1 && Promise$1.resolve) {
-	    // Promise.resolve without an argument throws an error in LG WebOS 2
-	    var promise = Promise$1.resolve(undefined);
+	    var promise = Promise$1.resolve();
 	    notify = function () {
 	      promise.then(flush);
 	    };
@@ -2709,10 +2701,6 @@ typeof navigator === "object" && (function (global, factory) {
 	  }
 	};
 
-	var navigator$1 = _global.navigator;
-
-	var _userAgent = navigator$1 && navigator$1.userAgent || '';
-
 	var _promiseResolve = function (C, x) {
 	  _anObject(C);
 	  if (_isObject(x) && x.constructor === C) return x;
@@ -2727,12 +2715,9 @@ typeof navigator === "object" && (function (global, factory) {
 
 
 
-
 	var PROMISE = 'Promise';
 	var TypeError$1 = _global.TypeError;
 	var process$2 = _global.process;
-	var versions = process$2 && process$2.versions;
-	var v8 = versions && versions.v8 || '';
 	var $Promise = _global[PROMISE];
 	var isNode$1 = _classof(process$2) == 'process';
 	var empty = function () { /* empty */ };
@@ -2747,13 +2732,7 @@ typeof navigator === "object" && (function (global, factory) {
 	      exec(empty, empty);
 	    };
 	    // unhandled rejections tracking support, NodeJS Promise without it fails @@species test
-	    return (isNode$1 || typeof PromiseRejectionEvent == 'function')
-	      && promise.then(empty) instanceof FakePromise
-	      // v8 6.6 (Node 10 and Chrome 66) have a bug with resolving custom thenables
-	      // https://bugs.chromium.org/p/chromium/issues/detail?id=830565
-	      // we can't detect it synchronously, so just check versions
-	      && v8.indexOf('6.6') !== 0
-	      && _userAgent.indexOf('Chrome/66') === -1;
+	    return (isNode$1 || typeof PromiseRejectionEvent == 'function') && promise.then(empty) instanceof FakePromise;
 	  } catch (e) { /* empty */ }
 	}();
 
@@ -4181,6 +4160,10 @@ typeof navigator === "object" && (function (global, factory) {
 	  return left ? stringFiller + S : S + stringFiller;
 	};
 
+	var navigator$1 = _global.navigator;
+
+	var _userAgent = navigator$1 && navigator$1.userAgent || '';
+
 	// https://github.com/tc39/proposal-string-pad-start-end
 
 
@@ -5025,44 +5008,55 @@ typeof navigator === "object" && (function (global, factory) {
 	// https://github.com/d4tocchini/customevent-polyfill
 	// https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent#Polyfill
 
-	try {
-	    var ce = new window.CustomEvent('test');
+	(function() {
+	  if (typeof window === 'undefined') {
+	    return;
+	  }
+
+	  try {
+	    var ce = new window.CustomEvent('test', { cancelable: true });
 	    ce.preventDefault();
 	    if (ce.defaultPrevented !== true) {
-	        // IE has problems with .preventDefault() on custom events
-	        // http://stackoverflow.com/questions/23349191
-	        throw new Error('Could not prevent default');
+	      // IE has problems with .preventDefault() on custom events
+	      // http://stackoverflow.com/questions/23349191
+	      throw new Error('Could not prevent default');
 	    }
-	} catch(e) {
-	  var CustomEvent$1 = function(event, params) {
-	    var evt, origPrevent;
-	    params = params || {
-	      bubbles: false,
-	      cancelable: false,
-	      detail: undefined
+	  } catch (e) {
+	    var CustomEvent = function(event, params) {
+	      var evt, origPrevent;
+	      params = params || {
+	        bubbles: false,
+	        cancelable: false,
+	        detail: undefined
+	      };
+
+	      evt = document.createEvent('CustomEvent');
+	      evt.initCustomEvent(
+	        event,
+	        params.bubbles,
+	        params.cancelable,
+	        params.detail
+	      );
+	      origPrevent = evt.preventDefault;
+	      evt.preventDefault = function() {
+	        origPrevent.call(this);
+	        try {
+	          Object.defineProperty(this, 'defaultPrevented', {
+	            get: function() {
+	              return true;
+	            }
+	          });
+	        } catch (e) {
+	          this.defaultPrevented = true;
+	        }
+	      };
+	      return evt;
 	    };
 
-	    evt = document.createEvent("CustomEvent");
-	    evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
-	    origPrevent = evt.preventDefault;
-	    evt.preventDefault = function () {
-	      origPrevent.call(this);
-	      try {
-	        Object.defineProperty(this, 'defaultPrevented', {
-	          get: function () {
-	            return true;
-	          }
-	        });
-	      } catch(e) {
-	        this.defaultPrevented = true;
-	      }
-	    };
-	    return evt;
-	  };
-
-	  CustomEvent$1.prototype = window.Event.prototype;
-	  window.CustomEvent = CustomEvent$1; // expose definition to window
-	}
+	    CustomEvent.prototype = window.Event.prototype;
+	    window.CustomEvent = CustomEvent; // expose definition to window
+	  }
+	})();
 
 	(function(global) {
 	  /**
@@ -5202,12 +5196,11 @@ typeof navigator === "object" && (function (global, factory) {
 	    }
 
 	    proto.toString = function() {
-	      var searchString = '';
+	      var searchArray = [];
 	      this.forEach(function(value, name) {
-	        if(searchString.length > 0) searchString+= '&';
-	        searchString += serializeParam(name) + '=' + serializeParam(value);
+	        searchArray.push(serializeParam(name) + '=' + serializeParam(value));
 	      });
-	      return searchString;
+	      return searchArray.join("&");
 	    };
 
 	    global.URLSearchParams = URLSearchParams;
@@ -5249,18 +5242,26 @@ typeof navigator === "object" && (function (global, factory) {
 	    var URL = function(url, base) {
 	      if(typeof url !== 'string') url = String(url);
 
-	      var doc = document.implementation.createHTMLDocument('');
-	      window.doc = doc;
-	      if(base) {
-	        var baseElement = doc.createElement('base');
+	      // Only create another document if the base is different from current location.
+	      var doc = document, baseElement;
+	      if(base && (global.location === void 0 || base !== global.location.href)) {
+	        doc = document.implementation.createHTMLDocument('');
+	        baseElement = doc.createElement('base');
 	        baseElement.href = base;
 	        doc.head.appendChild(baseElement);
+	        try {
+	            if(baseElement.href.indexOf(base) !== 0) throw new Error(baseElement.href);
+	        } catch (err) { 
+	            throw new Error("URL unable to set base " + base + " due to " + err);
+	        }
 	      }
 
 	      var anchorElement = doc.createElement('a');
 	      anchorElement.href = url;
-	      doc.body.appendChild(anchorElement);
-	      anchorElement.href = anchorElement.href; // force href to refresh
+	      if (baseElement) {
+	          doc.body.appendChild(anchorElement);
+	          anchorElement.href = anchorElement.href; // force href to refresh
+	      }
 
 	      if(anchorElement.protocol === ':' || !/:/.test(anchorElement.href)) {
 	        throw new TypeError('Invalid URL');
@@ -8171,12 +8172,9 @@ typeof navigator === "object" && (function (global, factory) {
 	            target = this.elements.container;
 	        }
 
-	        // Inject controls HTML
-	        if (is$1.element(container)) {
-	            target.appendChild(container);
-	        } else if (container) {
-	            target.insertAdjacentHTML('beforeend', container);
-	        }
+	        // Inject controls HTML (needs to be before captions, hence "afterbegin")
+	        var insertMethod = is$1.element(container) ? 'insertAdjacentElement' : 'insertAdjacentHTML';
+	        target[insertMethod]('afterbegin', container);
 
 	        // Find the elements if need be
 	        if (!is$1.element(this.elements.controls)) {
@@ -8300,7 +8298,7 @@ typeof navigator === "object" && (function (global, factory) {
 	        // * active:    The state preferred by user settings or config
 	        // * toggled:   The real captions state
 
-	        var languages = dedupe(Array.from(navigator.languages || navigator.userLanguage).map(function (language) {
+	        var languages = dedupe(Array.from(navigator.languages || navigator.language || navigator.userLanguage).map(function (language) {
 	            return language.split('-')[0];
 	        }));
 
@@ -11185,6 +11183,7 @@ typeof navigator === "object" && (function (global, factory) {
 	            videoId: videoId,
 	            playerVars: {
 	                autoplay: player.config.autoplay ? 1 : 0, // Autoplay
+	                hl: player.config.hl, // iframe interface language
 	                controls: player.supported.ui ? 0 : 1, // Only show controls if not fully supported
 	                rel: 0, // No related vids
 	                showinfo: 0, // Hide info
@@ -11235,6 +11234,10 @@ typeof navigator === "object" && (function (global, factory) {
 	                    triggerEvent.call(player, player.media, 'ratechange');
 	                },
 	                onReady: function onReady(event) {
+	                    // Bail if onReady has already been called. See issue #1108
+	                    if (is$1.function(player.media.play)) {
+	                        return;
+	                    }
 	                    // Get the instance
 	                    var instance = event.target;
 
@@ -12490,7 +12493,7 @@ typeof navigator === "object" && (function (global, factory) {
 	                    this.elements.container.className = '';
 
 	                    // Get attributes from URL and set config
-	                    if (url.searchParams.length) {
+	                    if (url.search.length) {
 	                        var truthy = ['1', 'true'];
 
 	                        if (truthy.includes(url.searchParams.get('autoplay'))) {
@@ -12504,6 +12507,7 @@ typeof navigator === "object" && (function (global, factory) {
 	                        // YouTube requires the playsinline in the URL
 	                        if (this.isYouTube) {
 	                            this.config.playsinline = truthy.includes(url.searchParams.get('playsinline'));
+	                            this.config.hl = url.searchParams.get('hl');
 	                        } else {
 	                            this.config.playsinline = true;
 	                        }
