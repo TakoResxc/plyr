@@ -23,8 +23,12 @@ export const transitionEndEvent = (() => {
 // Force repaint of element
 export function repaint(element) {
     setTimeout(() => {
-        toggleHidden(element, true);
-        element.offsetHeight; // eslint-disable-line
-        toggleHidden(element, false);
+        try {
+            toggleHidden(element, true);
+            element.offsetHeight; // eslint-disable-line
+            toggleHidden(element, false);
+        } catch (e) {
+            // Do nothing
+        }
     }, 0);
 }
