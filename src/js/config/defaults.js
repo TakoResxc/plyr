@@ -60,7 +60,7 @@ const defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.3.12/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.4.6/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -133,6 +133,7 @@ const defaults = {
         'settings',
         'pip',
         'airplay',
+        // 'download',
         'fullscreen',
     ],
     settings: ['captions', 'quality', 'speed'],
@@ -155,6 +156,7 @@ const defaults = {
         unmute: 'Unmute',
         enableCaptions: 'Enable captions',
         disableCaptions: 'Disable captions',
+        download: 'Download',
         enterFullscreen: 'Enter fullscreen',
         exitFullscreen: 'Exit fullscreen',
         frameTitle: 'Player for {title}',
@@ -184,6 +186,7 @@ const defaults = {
 
     // URLs
     urls: {
+        download: null,
         vimeo: {
             sdk: 'https://player.vimeo.com/api/player.js',
             iframe: 'https://player.vimeo.com/video/{0}?{1}',
@@ -210,6 +213,7 @@ const defaults = {
         mute: null,
         volume: null,
         captions: null,
+        download: null,
         fullscreen: null,
         pip: null,
         airplay: null,
@@ -245,6 +249,7 @@ const defaults = {
         'cuechange',
 
         // Custom events
+        'download',
         'enterfullscreen',
         'exitfullscreen',
         'captionsenabled',
@@ -290,6 +295,7 @@ const defaults = {
             fastForward: '[data-plyr="fast-forward"]',
             mute: '[data-plyr="mute"]',
             captions: '[data-plyr="captions"]',
+            download: '[data-plyr="download"]',
             fullscreen: '[data-plyr="fullscreen"]',
             pip: '[data-plyr="pip"]',
             airplay: '[data-plyr="airplay"]',
