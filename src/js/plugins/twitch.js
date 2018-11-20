@@ -1,29 +1,32 @@
 // ==========================================================================
 // Twitch plugin
 // ==========================================================================
-
-import utils from './../utils';
-import controls from './../controls';
-import ui from './../ui';
+import { createElement, replaceElement, toggleClass } from '../utils/elements';
+import { triggerEvent } from '../utils/events';
+import loadScript from '../utils/loadScript';
+import is from '../utils/is';
+import { generateId } from '../utils/strings';
+import controls from '../controls';
+import ui from '../ui';
 
 const twitch = {
     setup() {
         // Add embed class for responsive
-        utils.toggleClass(this.elements.wrapper, this.config.classNames.embed, true);
+        toggleClass(this.elements.wrapper, this.config.classNames.embed, true);
 
         // Set aspect ratio
         twitch.setAspectRatio.call(this);
 
         // Setup API
-        if (utils.is.object(window.Twitch) && utils.is.function(window.Twitch.Player)) {
+        if (is.object(window.Twitch) && is.function(window.Twitch.Player)) {
             twitch.ready.call(this);
         } else {
             // Load the API
-            utils.loadScript(this.config.urls.twitch.api).catch(error => {
+            loadScript(this.config.urls.twitch.api).catch(error => {
                 this.debug.warn('Twitch API failed to load', error);
             });
             // Load the API
-            utils.loadScript(this.config.urls.twitch.api);
+            loadScript(this.config.urls.twitch.api);
             const interval = window.setInterval(() => {
                 if (window.Twitch) {
                     window.clearInterval(interval);
@@ -41,7 +44,7 @@ const twitch = {
         let source = player.media.getAttribute('src');
 
         // Get from <div> if needed
-        if (utils.is.empty(source)) {
+        if (is.empty(source)) {
             source = player.media.getAttribute(this.config.attributes.embed.id);
         }
 
@@ -55,11 +58,12 @@ const twitch = {
         const videoId = twitch.parseTwitchId(source);
         opts[videoId.type] = videoId.src;
 
-        const id = utils.generateId(player.provider);
+        const id = generateId(player.provider);
+        const { poster } = player;
 
         // This was taken from youtube.js
-        const container = utils.createElement('div', { id });
-        player.media = utils.replaceElement(container, player.media);
+        const container = createElement('div', { id, poster, class: player.config.classNames.embedContainer });
+        player.media = replaceElement(container, player.media);
 
         player.embed = new window.Twitch.Player(id, opts);
 
@@ -93,7 +97,7 @@ const twitch = {
             player.media.duration = 0;
             const durationInterval = setInterval(() => {
                 const duration = instance.getDuration();
-                if (duration !== 0 && !isNaN(duration)) {
+                if (duration !== 0 && is.number(duration)) {
                     if (instance.plyrProps.type !== 'channel' && duration === Infinity) {
                         // Only channels are allowed to have an infinite duration
                         return;
@@ -101,7 +105,7 @@ const twitch = {
                     clearInterval(durationInterval);
                     player.media.duration = duration;
                     player.media.paused = true;
-                    utils.dispatchEvent.call(player, player.media, 'durationchange');
+                    triggerEvent.call(player, player.media, 'durationchange');
                 }
             }, 100);
 
@@ -119,7 +123,7 @@ const twitch = {
                     player.media.seeking = true;
 
                     // Trigger seeking
-                    utils.dispatchEvent.call(player, player.media, 'seeking');
+                    triggerEvent.call(player, player.media, 'seeking');
 
                     // Seek after events sent
                     instance.seek(time);
@@ -166,7 +170,10 @@ const twitch = {
                     // instance.getQuality() always returns 'group'
                     const entry = qualities.filter(v => v.group === instance.getQuality())[0];
 
-                    return entry && entry.height || undefined;
+                    if (entry) {
+                        return entry.height;
+                    }
+                    return undefined;
                 },
                 set(input) {
                     const qualities = instance.getQualities();
@@ -186,7 +193,7 @@ const twitch = {
                 set(input) {
                     volume = input;
                     instance.setVolume(volume);
-                    utils.dispatchEvent.call(player, player.media, 'volumechange');
+                    triggerEvent.call(player, player.media, 'volumechange');
                 },
             });
 
@@ -197,10 +204,10 @@ const twitch = {
                     return muted;
                 },
                 set(input) {
-                    const toggle = utils.is.boolean(input) ? input : muted;
+                    const toggle = is.boolean(input) ? input : muted;
                     muted = toggle;
                     instance.setMuted(muted);
-                    utils.dispatchEvent.call(player, player.media, 'volumechange');
+                    triggerEvent.call(player, player.media, 'volumechange');
                 },
             });
 
@@ -228,8 +235,8 @@ const twitch = {
                 player.media.setAttribute('tabindex', -1);
             }
 
-            utils.dispatchEvent.call(player, player.media, 'timeupdate');
-            utils.dispatchEvent.call(player, player.media, 'durationchange');
+            triggerEvent.call(player, player.media, 'timeupdate');
+            triggerEvent.call(player, player.media, 'durationchange');
 
             // Rebuild UI
             setTimeout(() => ui.build.call(player), 50);
@@ -241,19 +248,19 @@ const twitch = {
                     return;
                 }
                 player.media.paused = true;
-                utils.dispatchEvent.call(player, player.media, 'ended');
+                triggerEvent.call(player, player.media, 'ended');
             });
 
             instance.addEventListener(window.Twitch.Player.PLAY, () => {
                 player.media.paused = false;
                 player.media.seeking = false;
 
-                utils.dispatchEvent.call(player, player.media, 'play');
-                utils.dispatchEvent.call(player, player.media, 'playing');
+                triggerEvent.call(player, player.media, 'play');
+                triggerEvent.call(player, player.media, 'playing');
 
                 // Poll to get playback progress
                 player.timers.playing = window.setInterval(() => {
-                    utils.dispatchEvent.call(player, player.media, 'timeupdate');
+                    triggerEvent.call(player, player.media, 'timeupdate');
                 }, 50);
 
                 // Get quality
@@ -262,14 +269,16 @@ const twitch = {
 
             instance.addEventListener(window.Twitch.Player.PAUSE, () => {
                 player.media.paused = true;
-                utils.dispatchEvent.call(player, player.media, 'pause');
+                triggerEvent.call(player, player.media, 'pause');
             });
         });
     },
     // FIXME: Using Vimeo's code for now
+    // Set aspect ratio
+    // For Vimeo we have an extra 300% height <div> to hide the standard controls and UI
     setAspectRatio(input) {
-        const ratio = utils.is.string(input) ? input.split(':') : this.config.ratio.split(':');
-        const padding = 100 / ratio[0] * ratio[1];
+        const [x, y] = (is.string(input) ? input : this.config.ratio).split(':');
+        const padding = (100 / x) * y;
         this.elements.wrapper.style.paddingBottom = `${padding}%`;
 
         if (this.supported.ui) {
