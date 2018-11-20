@@ -146,7 +146,7 @@ class Plyr {
         this.elements.original = clone;
 
         // Set media type based on tag or data attribute
-        // Supported: video, audio, vimeo, youtube
+        // Supported: video, audio, vimeo, youtube, twitch
         const type = this.media.tagName.toLowerCase();
 
         // Embed properties
@@ -320,7 +320,7 @@ class Plyr {
     }
 
     get isEmbed() {
-        return Boolean(this.isYouTube || this.isVimeo);
+        return Boolean(this.isYouTube || this.isVimeo || this.isTwitch);
     }
 
     get isYouTube() {
@@ -329,6 +329,10 @@ class Plyr {
 
     get isVimeo() {
         return Boolean(this.provider === providers.vimeo);
+    }
+
+    get isTwitch() {
+        return Boolean(this.provider === providers.twitch);
     }
 
     get isVideo() {
@@ -1108,6 +1112,9 @@ class Plyr {
 
             // Vimeo does not always return
             setTimeout(done, 200);
+        } else if (this.isTwitch) {
+            clearInterval(this.timers.playing);
+            done();
         }
     }
 
@@ -1122,7 +1129,7 @@ class Plyr {
     /**
      * Check for support
      * @param {string} type - Player type (audio/video)
-     * @param {string} provider - Provider (html5/youtube/vimeo)
+     * @param {string} provider - Provider (html5/youtube/vimeo/twitch)
      * @param {bool} inline - Where player has `playsinline` sttribute
      */
     static supported(type, provider, inline) {

@@ -200,6 +200,9 @@ const defaults = {
         googleIMA: {
             sdk: 'https://imasdk.googleapis.com/js/sdkloader/ima3.js',
         },
+        twitch: {
+            api: 'https://player.twitch.tv/js/embed/v1.js',
+        },
     },
 
     // Custom control listeners
