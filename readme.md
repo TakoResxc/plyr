@@ -151,13 +151,13 @@ See [initialising](#initialising) for more information on advanced setups.
 You can use our CDN (provided by [Fastly](https://www.fastly.com/)) for the JavaScript. There's 2 versions; one with and one without [polyfills](#polyfills). My recommendation would be to manage polyfills seperately as part of your application but to make life easier you can use the polyfilled build.
 
 ```html
-<script src="https://cdn.plyr.io/3.4.6/plyr.js"></script>
+<script src="https://cdn.plyr.io/3.4.7/plyr.js"></script>
 ```
 
 ...or...
 
 ```html
-<script src="https://cdn.plyr.io/3.4.6/plyr.polyfilled.js"></script>
+<script src="https://cdn.plyr.io/3.4.7/plyr.polyfilled.js"></script>
 ```
 
 ### CSS
@@ -171,13 +171,13 @@ Include the `plyr.css` stylsheet into your `<head>`
 If you want to use our CDN (provided by [Fastly](https://www.fastly.com/)) for the default CSS, you can use the following:
 
 ```html
-<link rel="stylesheet" href="https://cdn.plyr.io/3.4.6/plyr.css">
+<link rel="stylesheet" href="https://cdn.plyr.io/3.4.7/plyr.css">
 ```
 
 ### SVG Sprite
 
 The SVG sprite is loaded automatically from our CDN (provided by [Fastly](https://www.fastly.com/)). To change this, see the [options](#options) below. For
-reference, the CDN hosted SVG sprite can be found at `https://cdn.plyr.io/3.4.6/plyr.svg`.
+reference, the CDN hosted SVG sprite can be found at `https://cdn.plyr.io/3.4.7/plyr.svg`.
 
 ## Ads
 
@@ -436,7 +436,7 @@ player.fullscreen.active; // false;
 | `language`           | ✓      | ✓      | Gets or sets the preferred captions language for the player. The setter accepts an ISO two-letter language code. Support for the languages is dependent on the captions you include. If your captions don't have any language data, or if you have multiple tracks with the same language, you may want to use `currentTrack` instead. |
 | `fullscreen.active`  | ✓      | -      | Returns a boolean indicating if the current player is in fullscreen mode.                                                                                                                                                                                                                                                              |
 | `fullscreen.enabled` | ✓      | -      | Returns a boolean indicating if the current player has fullscreen enabled.                                                                                                                                                                                                                                                             |
-| `pip`                | ✓      | ✓      | Gets or sets the picture-in-picture state of the player. The setter accepts a boolean. This currently only supported on Safari 10+ (on MacOS Sierra+ and iOS 10+) and Chrome 70+.                                                                                                                                                      |
+| `pip`&sup2;                | ✓      | ✓      | Gets or sets the picture-in-picture state of the player. The setter accepts a boolean. This currently only supported on Safari 10+ (on MacOS Sierra+ and iOS 10+) and Chrome 70+.                                                                                                                                                      |
 
 1.  YouTube only. HTML5 will follow.
 2.  HTML5 only
@@ -754,6 +754,7 @@ Plyr costs money to run, not only my time. I donate my time for free as I enjoy 
 -   [koel - A personal music streaming server that works.](http://koel.phanan.net/)
 -   [Oscar Radio](http://oscar-radio.xyz/)
 -   [Sparkk TV](https://www.sparkktv.com/)
+-   [@halfhalftravel](https://www.halfhalftravel.com/)
 
 Let me know on [Twitter](https://twitter.com/sam_potts) I can add you to the above list. It'd be awesome to see how you're using Plyr :-)
 
