@@ -4297,6 +4297,8 @@ typeof navigator === "object" && (function (global, factory) {
     }, {
       key: "media",
       value: function media() {
+        var _this = this;
+
         var player = this.player;
         var elements = player.elements; // Time change on media
 
@@ -4377,10 +4379,11 @@ typeof navigator === "object" && (function (global, factory) {
             }
 
             if (player.ended) {
-              player.restart();
-              player.play();
+              _this.proxy(event, player.restart, 'restart');
+
+              _this.proxy(event, player.togglePlay, 'play');
             } else {
-              player.togglePlay();
+              _this.proxy(event, player.togglePlay, 'play');
             }
           });
         } // Disable right click
@@ -4455,21 +4458,21 @@ typeof navigator === "object" && (function (global, factory) {
     }, {
       key: "bind",
       value: function bind(element, type, defaultHandler, customHandlerKey) {
-        var _this = this;
+        var _this2 = this;
 
         var passive = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : true;
         var player = this.player;
         var customHandler = player.config.listeners[customHandlerKey];
         var hasCustomHandler = is.function(customHandler);
         on.call(player, element, type, function (event) {
-          return _this.proxy(event, defaultHandler, customHandlerKey);
+          return _this2.proxy(event, defaultHandler, customHandlerKey);
         }, passive && !hasCustomHandler);
       } // Listen for control events
 
     }, {
       key: "controls",
       value: function controls$$1() {
-        var _this2 = this;
+        var _this3 = this;
 
         var player = this.player;
         var elements = player.elements; // IE doesn't support input event, so we fallback to change
@@ -4478,7 +4481,7 @@ typeof navigator === "object" && (function (global, factory) {
 
         if (elements.buttons.play) {
           Array.from(elements.buttons.play).forEach(function (button) {
-            _this2.bind(button, 'click', player.togglePlay, 'play');
+            _this3.bind(button, 'click', player.togglePlay, 'play');
           });
         } // Pause
 
@@ -4585,7 +4588,7 @@ typeof navigator === "object" && (function (global, factory) {
         if (browser.isIos) {
           var inputs = getElements.call(player, 'input[type="range"]');
           Array.from(inputs).forEach(function (input) {
-            return _this2.bind(input, inputEvent, function (event) {
+            return _this3.bind(input, inputEvent, function (event) {
               return repaint(event.target);
             });
           });
@@ -4611,7 +4614,7 @@ typeof navigator === "object" && (function (global, factory) {
 
         if (browser.isWebkit) {
           Array.from(getElements.call(player, 'input[type="range"]')).forEach(function (element) {
-            _this2.bind(element, 'input', function (event) {
+            _this3.bind(element, 'input', function (event) {
               return controls.updateRangeFill.call(player, event.target);
             });
           });
@@ -4658,7 +4661,7 @@ typeof navigator === "object" && (function (global, factory) {
             toggleClass(elements.controls, config.classNames.noTransition, false);
           }, 0); // Delay a little more for mouse users
 
-          var delay = _this2.touch ? 3000 : 4000; // Clear timer
+          var delay = _this3.touch ? 3000 : 4000; // Clear timer
 
           clearTimeout(timers.controls); // Hide again after delay
 
